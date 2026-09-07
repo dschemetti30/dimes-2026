@@ -1,0 +1,14 @@
+{
+  "name": "dimes-war-room",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "esbuild src/entry.jsx --bundle --minify --define:process.env.NODE_ENV=\"\\\"production\\\"\" --outfile=public/app.js",
+    "dev": "esbuild src/entry.jsx --bundle --define:process.env.NODE_ENV=\"\\\"development\\\"\" --outfile=public/app.js --servedir=public --serve=3000"
+  },
+  "devDependencies": {
+    "esbuild": "^0.24.0",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  }
+}
