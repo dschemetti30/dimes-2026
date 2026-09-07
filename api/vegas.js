@@ -1,8 +1,8 @@
 // Dimes War Room: Vegas lines + player props from The Odds API, normalized for the app.
 // Key lives here server-side only (or in ODDS_API_KEY env var if you add one in Vercel settings).
-const KEY = process.env.ODDS_API_KEY; // set in Vercel project settings
+const KEY = process.env.ODDS_API_KEY || "fa01dbca40e61e4a62f6e42ccd6cafb0";
 const BASE = "https://api.the-odds-api.com/v4/sports/americanfootball_nfl";
-const BOOKS = "draftkings,fanduel,betmgm";
+const BOOKS = "pinnacle,draftkings,fanduel,betmgm"; // Pinnacle is the sharp anchor when present; the three US books are what you can bet
 const PROP_MARKETS = "player_pass_yds,player_pass_tds,player_rush_yds,player_reception_yds,player_receptions,player_anytime_td";
 const TEAM = { "Arizona Cardinals": "ARI", "Atlanta Falcons": "ATL", "Baltimore Ravens": "BAL", "Buffalo Bills": "BUF", "Carolina Panthers": "CAR", "Chicago Bears": "CHI", "Cincinnati Bengals": "CIN", "Cleveland Browns": "CLE", "Dallas Cowboys": "DAL", "Denver Broncos": "DEN", "Detroit Lions": "DET", "Green Bay Packers": "GB", "Houston Texans": "HOU", "Indianapolis Colts": "IND", "Jacksonville Jaguars": "JAX", "Kansas City Chiefs": "KC", "Los Angeles Chargers": "LAC", "Los Angeles Rams": "LAR", "Las Vegas Raiders": "LV", "Miami Dolphins": "MIA", "Minnesota Vikings": "MIN", "New England Patriots": "NE", "New Orleans Saints": "NO", "New York Giants": "NYG", "New York Jets": "NYJ", "Philadelphia Eagles": "PHI", "Pittsburgh Steelers": "PIT", "Seattle Seahawks": "SEA", "San Francisco 49ers": "SF", "Tampa Bay Buccaneers": "TB", "Tennessee Titans": "TEN", "Washington Commanders": "WAS" };
 const abbr = (n) => TEAM[n] || n;
@@ -34,7 +34,6 @@ module.exports = async (req, res) => {
   if (req.method === "OPTIONS") return res.status(200).end();
   const wantProps = String((req.query || {}).props || "") === "1";
   const days = Math.min(9, Math.max(1, parseInt((req.query || {}).days || "8", 10)));
-  if (!KEY) return res.status(501).json({ error: "ODDS_API_KEY is not set in the Vercel project settings." });
   try {
     const r = await fetch(`${BASE}/odds?apiKey=${KEY}&regions=us&markets=h2h,spreads,totals&oddsFormat=american&bookmakers=${BOOKS}`);
     if (!r.ok) throw new Error(`Odds API ${r.status}: ${(await r.text()).slice(0, 200)}`);
@@ -49,12 +48,13 @@ module.exports = async (req, res) => {
         if (m.key === "spreads") { const h = m.outcomes.find((x) => x.name === e.home_team), a = m.outcomes.find((x) => x.name === e.away_team); if (h && h.point != null) { spreads.push(h.point); rec.sh = h.point; } if (h && h.price != null) rec.shP = Math.round(prob(h.price) * 1000) / 1000; if (a && a.price != null) rec.saP = Math.round(prob(a.price) * 1000) / 1000; }
         if (m.key === "h2h") { const h = m.outcomes.find((x) => x.name === e.home_team), a = m.outcomes.find((x) => x.name === e.away_team); if (h && h.price != null) { mlH.push(prob(h.price)); rec.mlH = Math.round(prob(h.price) * 1000) / 1000; } if (a && a.price != null) { mlA.push(prob(a.price)); rec.mlA = Math.round(prob(a.price) * 1000) / 1000; } }
       }); });
-      const total = avg(totals), sh = avg(spreads); const ph = avg(mlH), pa = avg(mlA);
+      const pin = bk.pinnacle || null;
+      const total = pin && pin.tot != null ? pin.tot : avg(totals), sh = pin && pin.sh != null ? pin.sh : avg(spreads); const ph = pin && pin.mlH != null ? pin.mlH : avg(mlH), pa = pin && pin.mlA != null ? pin.mlA : avg(mlA);
       const winHome = ph != null && pa != null ? Math.round((ph / (ph + pa)) * 1000) / 1000 : null;
       const home = abbr(e.home_team), away = abbr(e.away_team);
       return { id: e.id, home, away, commence: e.commence_time, total: total != null ? Math.round(total * 2) / 2 : null, spreadHome: sh != null ? Math.round(sh * 2) / 2 : null, winHome,
         overP: ov.length ? Math.round(avg(ov) * 1000) / 1000 : null, underP: un.length ? Math.round(avg(un) * 1000) / 1000 : null,
-        impliedHome: total != null && sh != null ? Math.round(((total - sh) / 2) * 10) / 10 : null, impliedAway: total != null && sh != null ? Math.round(((total + sh) / 2) * 10) / 10 : null, books: (e.bookmakers || []).length, bk };
+        impliedHome: total != null && sh != null ? Math.round(((total - sh) / 2) * 10) / 10 : null, impliedAway: total != null && sh != null ? Math.round(((total + sh) / 2) * 10) / 10 : null, books: (e.bookmakers || []).length, anchor: pin ? "pinnacle" : "consensus", bk };
     });
     const wx = await Promise.all(games.map((g) => weatherFor(g.home, g.away, g.commence)));
     games.forEach((g, i) => { g.wx = wx[i]; });
