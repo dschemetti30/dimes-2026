@@ -28,15 +28,16 @@ function getStore() {
 }
 function normName(n) { return n.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/['.]/g, "").replace(/\b(jr|sr|ii|iii|iv|v)\b/g, "").replace(/[^a-z0-9]+/g, ""); }
 let VEGAS = null; // set from state on each render
-let HEALTH = null; // { at, status: {key:{st,dc}}, injuries: [...] } from /api/players (nflverse official reports)
+let HEALTH = null; let USAGE = null;
+function usageOf(p) { if (!USAGE || !USAGE.players || !p) return null; return USAGE.players[hkey(p)] || null; } // { at, status: {key:{st,dc}}, injuries: [...] } from /api/players (nflverse official reports)
 const hkey = (p) => normName(p.n) + "|" + p.p;
-function healthOf(p) { if (!HEALTH || !p || p.p === "DEF") return null; const inj = HEALTH.inj && HEALTH.inj[hkey(p)]; const st = HEALTH.status && HEALTH.status[hkey(p)]; if (!inj && !st) return null; return { inj, st }; }
-// effective status: a manual setting wins; otherwise the official report designation
+function healthOf(p) { if (!HEALTH || !p || p.p === "DEF") return null; const k = hkey(p); const sl = HEALTH.health && HEALTH.health[k]; const of = HEALTH.official && HEALTH.official[k]; const own = HEALTH.own && HEALTH.own[k]; const add = HEALTH.trend && HEALTH.trend.add ? HEALTH.trend.add[k] : null; const drop = HEALTH.trend && HEALTH.trend.drop ? HEALTH.trend.drop[k] : null; if (!sl && !of && !own && add == null && drop == null) return null; return { sl, of, own, add, drop }; }
+// effective status: a manual setting wins; otherwise Sleeper's intraday status, otherwise the official report
 function effStatus(p) {
   if (!p) return "ok"; if (p.status && p.status !== "ok") return p.status;
   const h = healthOf(p); if (!h) return "ok";
-  const rs = h.st && h.st.st; if (rs && /^(RES|PUP|SUS|NON|EXE)/.test(rs)) return "o";
-  const d = h.inj && h.inj.status; if (d === "Out") return "o"; if (d === "Doubtful") return "d"; if (d === "Questionable") return "q";
+  const sl = h.sl; if (sl) { if (sl.st && /^(Injured Reserve|Inactive|Physically Unable|Suspended|Non Football|Reserve)/i.test(sl.st)) return "o"; const i = (sl.inj || "").toLowerCase(); if (i === "out" || i === "ir" || i === "pup" || i === "sus" || i === "cov" || i === "na") return "o"; if (i === "doubtful") return "d"; if (i === "questionable") return "q"; }
+  const d = h.of && h.of.status; if (d === "Out") return "o"; if (d === "Doubtful") return "d"; if (d === "Questionable") return "q";
   return "ok";
 }
 function vegasProp(p) { if (!VEGAS || !VEGAS.props || !p) return null; return VEGAS.props[normName(p.n)] || null; }
@@ -50,6 +51,8 @@ function vegasPts(p) {
 function vegasGame(team) { if (!VEGAS || !VEGAS.games) return null; return VEGAS.games.find((g) => g.home === team || g.away === team) || null; }
 function vegasFresh(week) { return !!(VEGAS && VEGAS.week === week && VEGAS.games && VEGAS.games.length); }
 function vegasUsed(p, week) { return vegasFresh(week) && vegasPts(p) != null; }
+let VHIST = null;
+function openLine(week, key, field) { const h = VHIST && VHIST[week]; if (!h || !h.open || !h.open[key]) return null; return h.open[key][field]; }
 const TEAMS = ["ARI","ATL","BAL","BUF","CAR","CHI","CIN","CLE","DAL","DEN","DET","GB","HOU","IND","JAX","KC","LAC","LAR","LV","MIA","MIN","NE","NO","NYG","NYJ","PHI","PIT","SEA","SF","TB","TEN","WAS"];
 const TEAM_PAL = { ARI:["#97233F","#FFB612"], ATL:["#A71930","#000000"], BAL:["#241773","#9E7C0C"], BUF:["#00338D","#C60C30"], CAR:["#0085CA","#101820"], CHI:["#0B162A","#C83803"], CIN:["#FB4F14","#000000"], CLE:["#311D00","#FF3C00"], DAL:["#003594","#869397"], DEN:["#FB4F14","#002244"], DET:["#0076B6","#B0B7BC"], GB:["#203731","#FFB612"], HOU:["#03202F","#A71930"], IND:["#002C5F","#A2AAAD"], JAX:["#006778","#D7A22A"], KC:["#E31837","#FFB81C"], LAC:["#0080C6","#FFC20E"], LAR:["#003594","#FFA300"], LV:["#000000","#A5ACAF"], MIA:["#008E97","#FC4C02"], MIN:["#4F2683","#FFC62F"], NE:["#002244","#C60C30"], NO:["#D3BC8D","#101820"], NYG:["#0B2265","#A71930"], NYJ:["#125740","#FFFFFF"], PHI:["#004C54","#A5ACAF"], PIT:["#FFB612","#101820"], SEA:["#002244","#69BE28"], SF:["#AA0000","#B3995D"], TB:["#D50A0A","#FF7900"], TEN:["#0C2340","#4B92DB"], WAS:["#5A1414","#FFB612"] };
 function lum(hex) { const n = parseInt(hex.slice(1), 16); const f = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }; return 0.2126 * f(n >> 16) + 0.7152 * f((n >> 8) & 255) + 0.0722 * f(n & 255); }
@@ -712,6 +715,23 @@ textarea.notes{min-height:120px;resize:vertical;line-height:1.5}
 .toast .in button{color:#FF8DA1;font-weight:800;flex:none;text-transform:uppercase;letter-spacing:.1em;font-size:12px}
 .dark .toast .in button{color:var(--red)}
 
+/* ---- Edge v4 ---- */
+.tier.strong{color:var(--go)}.tier.good{color:var(--info)}.tier.lean{color:var(--ink2)}
+.pill.tier{text-transform:uppercase}
+.pill.tier.strong{background:var(--go-bg);color:var(--go)}.pill.tier.good{background:var(--info-bg);color:var(--info)}.pill.tier.lean{background:var(--surface3);color:var(--ink2)}
+.upc{color:var(--go)}.dnc{color:var(--stop)}
+.pkv b.tier{font-size:16px;letter-spacing:.08em;text-transform:uppercase}
+.pown{display:flex;gap:16px;flex-wrap:wrap;padding:8px 2px 0}
+.pown span{display:flex;flex-direction:column}
+.pown b{font-size:18px;font-weight:800;line-height:1}
+.pown b.up{color:var(--go)}.pown b.dn{color:var(--stop)}
+.pown small{font-size:9.5px;color:var(--ink3);font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin-top:3px}
+.usage{padding:0 16px 6px;overflow-x:auto}
+.usage table{width:100%;border-collapse:collapse;font-size:13px}
+.usage th{font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);text-align:right;padding:4px 6px}
+.usage th:first-child,.usage th:nth-child(2),.usage td:first-child,.usage td:nth-child(2){text-align:left}
+.usage td{text-align:right;padding:5px 6px;border-top:1px solid var(--rule);font-weight:600}
+.usage td b{font-weight:800}
 /* ---- Edge v3 ---- */
 .ebar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:0 4px 10px}
 .eb-l,.eb-r{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
@@ -1088,13 +1108,14 @@ export default function App() {
 
   // ---- derived ---------------------------------------------------------------
   const settings = state ? state.settings : { theme: "auto", rosterLimit: 17 };
-  VEGAS = state ? state.vegas || null : null; HEALTH = state ? state.health || null : null;
+  VEGAS = state ? state.vegas || null : null; HEALTH = state ? state.health || null : null; USAGE = state ? state.usage || null : null; VHIST = state ? state.vegasHist || null : null;
   const [vegasBusy, setVegasBusy] = useState(false); const [vegasErr, setVegasErr] = useState("");
   // Daily health sync: official injury reports + roster status, at most every 6 hours
   useEffect(() => {
     if (!state || !loaded.current) return; const h = state.health; if (h && h.at && Date.now() - h.at < 6 * 3600e3) return;
     const base = WEB ? "" : (settings.apiBase || DEFAULT_API).replace(/\/$/, "");
-    (async () => { try { const r = await fetch(`${base}/api/players`, { headers: { Accept: "application/json" } }); if (!r.ok) return; const j = await r.json(); if (j.error) return; const inj = {}; (j.injuries || []).forEach((x) => { inj[x.k] = x; }); update((s) => ({ ...s, health: { at: j.at || Date.now(), week: j.injWeek, status: j.status || {}, inj, source: j.source } })); } catch (e) { /* offline or blocked; manual statuses still work */ } })();
+    (async () => { try { const r = await fetch(`${base}/api/players`, { headers: { Accept: "application/json" } }); if (!r.ok) return; const j = await r.json(); if (j.error) return; update((s) => ({ ...s, health: { at: j.at || Date.now(), week: j.injWeek, health: j.health || {}, official: j.official || {}, own: j.own || {}, trend: j.trend || { add: {}, drop: {} }, sources: j.sources || [] } })); } catch (e) { /* offline or blocked; manual statuses still work */ } })();
+    (async () => { try { const u = state.usage; if (u && u.at && Date.now() - u.at < 12 * 3600e3) return; const r = await fetch(`${base}/api/usage?season=2026&weeks=5`, { headers: { Accept: "application/json" } }); if (!r.ok) return; const j = await r.json(); if (j.error) return; update((s) => ({ ...s, usage: { at: j.at || Date.now(), season: j.season, weeks: j.weeks || [], players: j.players || {}, note: j.note || null } })); } catch (e) { /* skip */ } })();
   }, [state && state.health ? state.health.at : 0, loaded.current]);
   const ROSTER_LIMIT = settings.rosterLimit || 17;
   const dark = settings.theme === "dark" || (settings.theme === "auto" && sysDark);
@@ -1200,7 +1221,12 @@ export default function App() {
       const r = await fetch(`${apiBase}/api/vegas?props=1`, { headers: { Accept: "application/json" } });
       if (!r.ok) throw new Error(`lines server answered ${r.status}`);
       const j = await r.json(); if (j.error) throw new Error(j.error);
-      update((s) => { const vg = { at: j.at || Date.now(), week, games: j.games || [], props: j.props || {}, credits: j.credits || null }; const bets = (s.bets || []).map((b) => { if (b.result || b.week !== week) return b; const cur = currentQuote(vg, b); return cur ? { ...b, close: cur, closeAt: vg.at } : b; }); return { ...s, vegas: vg, bets }; });
+      update((s) => { const vg = { at: j.at || Date.now(), week, games: j.games || [], props: j.props || {}, credits: j.credits || null }; const bets = (s.bets || []).map((b) => { if (b.result || b.week !== week) return b; const cur = currentQuote(vg, b); return cur ? { ...b, close: cur, closeAt: vg.at } : b; });
+        const snap = {}; Object.keys(vg.props).forEach((k) => { const pr = vg.props[k]; const px = pr.px || {}; snap[k] = { pass_yds: pr.pass_yds, pass_tds: pr.pass_tds, rush_yds: pr.rush_yds, rec_yds: pr.rec_yds, rec: pr.rec, atd: pr.atd, px: { pass_yds: px.pass_yds, pass_tds: px.pass_tds, rush_yds: px.rush_yds, rec_yds: px.rec_yds, rec: px.rec, atd: px.atd } }; });
+        const gsnap = vg.games.map((g) => ({ home: g.home, away: g.away, total: g.total, spreadHome: g.spreadHome, winHome: g.winHome }));
+        const hist = { ...(s.vegasHist || {}) }; const prev = hist[week]; hist[week] = { openAt: prev ? prev.openAt : vg.at, open: prev ? prev.open : snap, openGames: prev ? prev.openGames : gsnap, closeAt: vg.at, close: snap, closeGames: gsnap };
+        const keys = Object.keys(hist).sort((a, b) => a - b); while (keys.length > 6) delete hist[keys.shift()];
+        return { ...s, vegas: vg, bets, vegasHist: hist }; });
       showToast(`Pulled ${(j.games || []).length} games and ${Object.keys(j.props || {}).length} players with props.${j.credits && j.credits.remaining ? ` ${j.credits.remaining} credits left this month.` : ""}`);
     } catch (e) {
       const msg = /Failed to fetch|NetworkError|blocked|CORS/i.test(e.message) ? (WEB ? "Could not reach the lines server. Check the connection and try again." : "This view cannot reach the lines server. Open the web version to pull Vegas lines.") : e.message;
@@ -1395,13 +1421,19 @@ function PlayerSheet({ p, mine, ownerName, week, irCount, watched, onStatus, onN
         <div className="phero">
           <div className="pht">{b && b.hs ? <img className="hsh" src={b.hs} alt="" onError={(e) => { e.target.style.display = "none"; }} /> : null}<Badge p={p} /><div className="phn"><div className="pbig cond">{hasProj(p) ? fmt1(pw(p)) : "n/a"}</div><div className="lab">Points per week, {srcList(p).length ? srcList(p).join(" + ") + " blend" : "no season projection"}</div></div></div>
           {b && <div className="pbio">{b.num && <span>#{b.num}</span>}{b.h && <span>{b.h}</span>}{b.w && <span>{b.w} lb</span>}{b.age != null && <span>{b.age} yrs</span>}{b.exp != null && <span>{b.exp === 0 ? "rookie" : `${b.exp} yr${b.exp > 1 ? "s" : ""} pro`}</span>}{b.col && <span>{b.col}</span>}{b.dc && <span>depth {b.dc}</span>}</div>}
-          {(h || es !== "ok") && <div className={"prep " + (es === "o" ? "o" : es === "d" ? "d" : es === "q" ? "q" : "ok")}>{h && h.inj ? <><b>{h.inj.status || "On the report"}</b>{h.inj.injury ? `, ${h.inj.injury.toLowerCase()}` : ""}{h.inj.practice ? `. ${h.inj.practice.replace("Participation in Practice", "practice").replace("In Practice", "practice")}` : ""}</> : h && h.st && h.st.st && !/^ACT/.test(h.st.st) ? <b>Roster status {h.st.st}</b> : es !== "ok" ? <b>{STATUS[es].label}{p.status && p.status !== "ok" ? " (set by you)" : ""}</b> : null}{h && HEALTH && HEALTH.at ? <small>official report, synced {new Date(HEALTH.at).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" })}</small> : null}</div>}
+          {(() => { const sl = h && h.sl, of = h && h.of; const line = sl && (sl.inj || sl.part || sl.prac) ? <><b>{sl.inj || "On the report"}</b>{sl.part ? `, ${sl.part.toLowerCase()}` : ""}{sl.prac ? `. Practice: ${sl.prac.toLowerCase()}` : ""}{sl.note ? `. ${sl.note}` : ""}</> : of && (of.status || of.injury) ? <><b>{of.status || "On the report"}</b>{of.injury ? `, ${of.injury.toLowerCase()}` : ""}{of.practice ? `. ${of.practice.replace("Participation in Practice", "practice").replace("In Practice", "practice")}` : ""}</> : sl && sl.st && !/^Active/i.test(sl.st) ? <b>{sl.st}</b> : es !== "ok" ? <b>{STATUS[es].label}{p.status && p.status !== "ok" ? " (set by you)" : ""}</b> : null; if (!line) return null; return <div className={"prep " + (es === "o" ? "o" : es === "d" ? "d" : es === "q" ? "q" : "ok")}>{line}{HEALTH && HEALTH.at ? <small>{sl ? "Sleeper" : "official report"}, synced {new Date(HEALTH.at).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" })}</small> : null}</div>; })()}
+          {h && (h.own || h.add != null || h.drop != null) && <div className="pown">{h.own && <span><b className="cond">{h.own.pct}%</b><small>rostered (ESPN)</small></span>}{h.own && h.own.started != null && <span><b className="cond">{h.own.started}%</b><small>started</small></span>}{h.own && h.own.chg != null && h.own.chg !== 0 && <span><b className={"cond " + (h.own.chg > 0 ? "up" : "dn")}>{signed(h.own.chg)}</b><small>this week</small></span>}{h.add != null && <span><b className="cond up">+{h.add.toLocaleString()}</b><small>Sleeper adds, 24h</small></span>}{h.drop != null && <span><b className="cond dn">{h.drop.toLocaleString()}</b><small>drops, 24h</small></span>}</div>}
         </div>); })()}
       <div className="stats" style={{ gridTemplateColumns: "repeat(3,1fr)", paddingTop: 0 }}>
         <div className="stat"><div className="v cond">{p.pwF != null ? fmt1(p.pwF) : "–"}</div><div className="k">Fantasy Index</div></div>
         <div className="stat"><div className="v cond">{p.pwB != null ? fmt1(p.pwB) : "–"}</div><div className="k">Footballguys</div></div>
         <div className="stat"><div className="v cond">{p.pwP != null ? fmt1(p.pwP) : "–"}</div><div className="k">PFF</div></div>
       </div>
+      {(() => { const u = usageOf(p); if (!u || !USAGE.weeks || !USAGE.weeks.length) return null; const ws = USAGE.weeks.filter((w) => u.wk[w]); if (!ws.length) return null; return (
+        <div className="usage"><div className="ssec" style={{ padding: "6px 0 4px" }}><span>Usage, {USAGE.season}</span><span>snaps, targets, share</span></div>
+          <table><thead><tr><th>Wk</th><th>Opp</th><th>Snap%</th>{p.p === "QB" ? <><th>Att</th><th>Yds</th></> : <><th>Tgt</th><th>Tgt%</th><th>Car</th></>}<th>TD</th><th>Pts</th></tr></thead>
+          <tbody>{ws.map((w) => { const r = u.wk[w]; return <tr key={w}><td>{w}</td><td>{r.opp}</td><td>{r.snap != null ? r.snap : "–"}</td>{p.p === "QB" ? <><td>{r.att}</td><td>{r.py}</td></> : <><td>{r.tgt}</td><td>{r.ts != null ? r.ts : "–"}</td><td>{r.car}</td></>}<td>{r.td}</td><td><b>{r.fp}</b></td></tr>; })}</tbody></table>
+        </div>); })()}
       {p.s25 && <div className="s25"><div className="ssec" style={{ padding: "6px 0 4px" }}><span>2025 season{p.s25.team25 && p.s25.team25 !== p.t ? ` (${p.s25.team25})` : ""}</span><span>{p.s25.g} games, {p.s25.ppg} pts/game</span></div><div className="s25g">{(p.p === "QB" ? [["Pass yds", p.s25.py], ["Pass TD", p.s25.ptd], ["INT", p.s25.int], ["Rush yds", p.s25.ry], ["Rush TD", p.s25.rtd]] : p.p === "RB" ? [["Carries", p.s25.car], ["Rush yds", p.s25.ry], ["Rush TD", p.s25.rtd], ["Targets", p.s25.tgt], ["Rec yds", p.s25.recy], ["Rec TD", p.s25.rectd]] : [["Targets", p.s25.tgt], ["Rec", p.s25.rec], ["Rec yds", p.s25.recy], ["Rec TD", p.s25.rectd], ["Tgt share", p.s25.ts != null ? p.s25.ts + "%" : "–"]]).map(([k, v]) => <span key={k}><b className="cond">{v}</b><small>{k}</small></span>)}</div></div>}
       {(() => { const bd = wkBreakdown(p, week); if (!bd.parts.length) return null; const m = matchup(p.t, week); return (
         <div className="card" style={{ marginTop: 4 }}>
@@ -1554,6 +1586,11 @@ function MarketView({ week, freeAgents, upgrades, worstAt, watch, onWatch, onAdd
         {targets.list.slice(0, 8).map((t) => <PRow key={t.p.id + t.team} p={t.p} week={NEUTRAL_WEEK} onClick={() => onPlayer(t.p.id)} sub={`${t.team}${t.tier === 0 ? ", bench" : t.tier === 1 ? ", their FLEX" : ", core starter"}${t.theirNeed && t.theirNeed.gap < -0.5 ? `, thin at ${t.theirNeed.g}` : ""}`} right={<><span className="pill up">{signed(t.gain)}</span><span className="chev">›</span></>} />)}
         <div className="hint">Easiest asks first (bench, then FLEX). Tap a player, then Trade for him, to build the offer.</div>
       </section>
+      {HEALTH && HEALTH.trend && HEALTH.trend.add && Object.keys(HEALTH.trend.add).length > 0 && (() => { const rows = freeAgents.map((p) => ({ p, n: HEALTH.trend.add[hkey(p)] || 0 })).filter((x) => x.n > 0).sort((a, b) => b.n - a.n).slice(0, 8); if (!rows.length) return null; return (
+        <section className="card"><div className="ch"><h2 className="cond">Trending on the wire</h2><span className="aux">Sleeper adds, last 24h</span></div>
+          {rows.map(({ p, n }) => <Row key={p.id} p={p} note={`+${n.toLocaleString()} adds${HEALTH.own && HEALTH.own[hkey(p)] ? `, ${HEALTH.own[hkey(p)].pct}% rostered on ESPN` : ""}`} />)}
+          <div className="hint">Who the fantasy public is grabbing right now, limited to players nobody in Hogg Heaven owns. Crowd moves are a signal, not a projection.</div>
+        </section>); })()}
       <section className="card"><div className="ch"><h2 className="cond">Upgrades</h2><span className="aux">beats one of your starters</span></div>
         {upgrades.length === 0 && <div className="empty">No free agent projects above your starters. The wire is for depth right now.</div>}
         {upgrades.map((u) => <Row key={u.fa.id} p={u.fa} note={`${signed(u.gain)} over ${u.over ? lastName(u.over.n) : "empty slot"}`} />)}
@@ -1992,7 +2029,7 @@ function GameCard({ g, week, roster, oppIds, oppName, onAddLeg, selected, onTogg
         <div className="wpl"><span>{Math.round(pAway * 100)}%</span><Wx wx={g.wx} /><span>{Math.round(pHome * 100)}%</span></div>
         {(mine.length > 0 || theirs.length > 0) && <div className="gstakes">{mine.length > 0 && <span><b>Dimes:</b> {mine.map((p) => lastName(p.n)).join(", ")}</span>}{theirs.length > 0 && <span><b>{lastWord(oppName)}:</b> {theirs.map((p) => lastName(p.n)).join(", ")}</span>}</div>}
       </button>
-      <div className="gfoot"><button className="lnk" onClick={() => setOpen((v) => !v)}>{open ? "Hide lines" : `Shop lines${bestEv > 0.01 ? `, best ${signed(bestEv * 100)}%` : ""}`}</button>{modelTot != null && tau != null && <span className="muted small">our stat lines total {modelTot} ({signed(modelTot - tau)})</span>}</div>
+      <div className="gfoot"><button className="lnk" onClick={() => setOpen((v) => !v)}>{open ? "Hide prices" : bestEv > 0.01 ? `Best price beats fair by ${signed(bestEv * 100)}%` : "Compare prices"}</button><span className="muted small">{g.anchor === "pinnacle" ? "fair from Pinnacle" : "fair from consensus"}</span></div>
       {open && shop.length > 0 && (
         <div className="shop">
           <div className="shh"><span>Book</span><span>{g.home} spread</span><span>Total</span><span>Moneyline</span></div>
@@ -2003,7 +2040,7 @@ function GameCard({ g, week, roster, oppIds, oppName, onAddLeg, selected, onTogg
               <span className="cell">{r.tot != null ? <><button className={"pc" + (bestO && bestO.book === r.book ? " best" : "")} onClick={() => legTot("Over", r.tot, r.pO, r.oP, r.book)}>O {r.tot} <small>{fmtPrice(toAmerican(r.oP))}</small></button>{evTag(r.evO)}<button className={"pc" + (bestU && bestU.book === r.book ? " best" : "")} onClick={() => legTot("Under", r.tot, r.pU, r.uP, r.book)}>U {r.tot} <small>{fmtPrice(toAmerican(r.uP))}</small></button>{evTag(r.evU)}</> : <span className="muted">–</span>}</span>
               <span className="cell">{r.mlH != null ? <><button className={"pc" + (bestMH && bestMH.book === r.book ? " best" : "")} onClick={() => legML(g.home, pHome, r.mlH, r.book)}>{g.home} <small>{fmtPrice(toAmerican(r.mlH))}</small></button>{evTag(r.evMH)}<button className={"pc" + (bestMA && bestMA.book === r.book ? " best" : "")} onClick={() => legML(g.away, pAway, r.mlA, r.book)}>{g.away} <small>{fmtPrice(toAmerican(r.mlA))}</small></button>{evTag(r.evMA)}</> : <span className="muted">–</span>}</span>
             </div>))}
-          <div className="shn">Each book's number is priced against the three-book consensus with the empirical margin and total distributions (4,175 games, key numbers included). Green beats fair by more than 1%. Tap a price to add it to the slip. Best price per side is outlined.</div>
+          <div className="shn">Green means that book's price is better than fair by more than 1%. Tap a price to add it to the slip.</div>
         </div>)}
     </div>
   );
@@ -2023,16 +2060,16 @@ function SlipPanel({ slip, bankroll, onRemoveLeg, onClear, onLogBet, week }) {
       {slip.map((l) => <div key={l.id} className="leg"><span className="lp cond">{Math.round(l.p * 100)}%</span><span className="lt"><b>{l.label}</b><small>{l.sub}{l.price != null ? `, ${fmtPrice(l.price)}${l.book ? ` at ${l.book}` : ""}` : ""}</small></span><button className="iconb" onClick={() => onRemoveLeg(l.id)} aria-label="Remove leg">✕</button></div>)}
       {priced && (
         <div className="slipmath">
-          <div className="sm"><b className="cond">{(priced.indep * 100).toFixed(1)}%</b><small>if independent</small><span className="cond">{fmtPrice(fairIndep)}</span></div>
-          <div className="sm main"><b className="cond">{(priced.joint * 100).toFixed(1)}%</b><small>with correlation</small><span className="cond">{fmtPrice(fairJoint)}</span></div>
-          <div className="sm"><b className={"cond " + (pos ? "up" : neg ? "dn" : "")}>{signed(priced.corrAdj * 100)}</b><small>points from correlation</small><span className="muted">±{(priced.se * 100).toFixed(1)}</span></div>
+          <div className="sm"><b className="cond">{(priced.indep * 100).toFixed(1)}%</b><small>books assume</small><span className="cond">{fmtPrice(fairIndep)}</span></div>
+          <div className="sm main"><b className="cond">{(priced.joint * 100).toFixed(1)}%</b><small>real chance</small><span className="cond">{fmtPrice(fairJoint)}</span></div>
+          <div className="sm"><b className={"cond " + (pos ? "up" : neg ? "dn" : "")}>{signed(priced.corrAdj * 100)}</b><small>correlation</small><span className="muted">pts</span></div>
         </div>)}
       {priced && neg && <div className="hint" style={{ paddingTop: 0, color: "var(--stop)" }}>These legs work against each other. The book will still price them as if independent, which is in their favor, not yours.</div>}
       {priced && pos && <div className="hint" style={{ paddingTop: 0 }}>These legs pull together. If the book quotes something close to the independent price, the correlation is your edge.</div>}
       <div className="slipin"><label>Book's parlay odds</label><input inputMode="numeric" placeholder="+650" value={odds} onChange={(e) => setOdds(e.target.value)} />{ev != null && <span className={"evbig cond " + (ev > 0 ? "up" : "dn")}>{signed(ev * 100)}% EV</span>}</div>
-      {ev != null && <div className="hint" style={{ paddingTop: 0 }}>{ev > 0 ? `Fair is ${fmtPrice(fairJoint)}; the book is offering ${fmtPrice(off)}. Quarter Kelly says $${Math.round(stake)} of a ${bankroll} bankroll.` : `Fair is ${fmtPrice(fairJoint)}; the book's ${fmtPrice(off)} is below fair. Pass, or shop it.`}</div>}
+      {ev != null && <div className="hint" style={{ paddingTop: 0 }}>{ev > 0 ? `Fair odds are ${fmtPrice(fairJoint)} and the book is offering ${fmtPrice(off)}. Suggested stake $${Math.round(stake)}.` : `Fair odds are ${fmtPrice(fairJoint)}; ${fmtPrice(off)} is worse than fair. Pass or shop it.`}</div>}
       <div className="btns" style={{ paddingTop: 0 }}>{ev != null && <button className="btn pri sm" onClick={() => onLogBet({ kind: "parlay", game: slip.map((l) => l.label).join(" + "), player: null, mk: `${slip.length}-leg parlay`, side: "", line: null, price: off, priceP: offP, pWin: priced.joint, stake: Math.round(stake) || 0 })}>Track this slip</button>}<button className="btn sm" onClick={onClear}>Clear</button></div>
-      <div className="hint">Joint probability comes from a Gaussian copula with the engine's rule-based correlations (QB yards with his WR's yards 0.45, receptions with receiving yards 0.75, moneyline with spread 0.80, opposing rushing against a team winning -0.30, and so on), 40,000 draws with a fixed seed. Legs in different games are independent.</div>
+      <div className="hint">Legs from the same game move together, and books usually price them as if they don't. When "real chance" beats "books assume," that gap is yours.</div>
     </section>
   );
 }
@@ -2042,6 +2079,8 @@ function Wx({ wx }) {
   const windy = wx.wind != null && wx.wind >= 15, gale = wx.wind != null && wx.wind >= 20, wet = wx.pop != null && wx.pop >= 50;
   return <span className={"wx" + (gale ? " bad" : windy || wet ? " warn" : "")}>{wx.temp != null && <b>{wx.temp}°</b>}{wx.wind != null && <span>wind {wx.wind}{wx.gust && wx.gust >= wx.wind + 8 ? ` (gusts ${wx.gust})` : ""} mph</span>}{wx.pop != null && wx.pop >= 20 && <span>{wx.pop}% rain</span>}{wx.roof === "retract" && <span className="muted">roof may close</span>}{wx.city && <span className="muted">{wx.city}</span>}</span>;
 }
+function tierOf(e) { if (e.ev == null || e.ev <= 0.005) return null; if (e.ev >= 0.06 && e.nb >= 2 && e.p.pwF != null && e.p.pwP != null) return "Strong"; if (e.ev >= 0.03 && e.nb >= 1) return "Good"; return "Lean"; }
+const edgePts = (e) => (e.fair != null ? Math.round((e.pWin - e.fair) * 100) : null);
 function picksFrom(priced, games) {
   const gm = Object.fromEntries(games.map((g) => [`${g.away}@${g.home}`, g]));
   return priced.filter((e) => e.ev != null && e.ev > 0.025 && e.pWin >= 0.5 && e.nb >= 2 && e.p.pwF != null && e.p.pwP != null && Math.abs(e.gap) >= 0.05).map((e) => {
@@ -2058,14 +2097,19 @@ function EdgeView({ week, vegas, vegasBusy, vegasErr, onVegas, apiBase, owner, o
   const fresh = vegasFresh(week);
   const [mk, setMk] = useState("ALL"); const [mineOnly, setMineOnly] = useState(false); const [showAll, setShowAll] = useState(false); const [help, setHelp] = useState(false);
   const [sel, setSel] = useState(() => new Set());
+  const [gamesOpen, setGamesOpen] = useState(true); const [playsOpen, setPlaysOpen] = useState(true); const [gSort, setGSort] = useState("kick"); const [pSort, setPSort] = useState("edge");
   const toggleSel = (id) => setSel((s0) => { const n = new Set(s0); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const pricedAll = useMemo(() => priceProps(week, owner, bankroll), [vegas, week, owner, bankroll]);
   const games = fresh ? [...vegas.games].sort((a, b) => new Date(a.commence) - new Date(b.commence)) : [];
+  const gameKick = Object.fromEntries(games.map((g) => [`${g.away}@${g.home}`, new Date(g.commence).getTime()]));
   const selGames = games.filter((g) => sel.has(g.id)).map((g) => `${g.away}@${g.home}`);
   const priced = selGames.length ? pricedAll.filter((e) => selGames.includes(e.game)) : pricedAll;
   const picks = useMemo(() => picksFrom(priced, games), [priced, games]);
   const best = priced.filter((e) => e.ev != null && e.ev > 0.02 && e.pWin > 0.45).slice(0, 6);
-  const listed = priced.filter((e) => mk === "ALL" || e.mk === mk).filter((e) => !mineOnly || e.own === ME).filter((e) => showAll || (e.ev != null ? e.ev > 0 : Math.abs(e.gap) >= 0.08)).slice(0, 60);
+  const listed = priced.filter((e) => mk === "ALL" || e.mk === mk).filter((e) => !mineOnly || e.own === ME).filter((e) => showAll || (e.ev != null ? e.ev > 0.005 : Math.abs(e.gap) >= 0.08)).sort((a, b) => pSort === "edge" ? ((b.fair != null ? b.pWin - b.fair : -1) - (a.fair != null ? a.pWin - a.fair : -1)) : pSort === "ret" ? ((b.ev == null ? -9 : b.ev) - (a.ev == null ? -9 : a.ev)) : pSort === "name" ? a.p.n.localeCompare(b.p.n) : (gameKick[a.game] || 0) - (gameKick[b.game] || 0)).slice(0, 80);
+  const mineTeams = new Set(roster.map((p) => p.t));
+  const bestLineEv = (g) => { if (!g.bk) return -1; const mu = g.spreadHome != null ? -g.spreadHome : 0; let best = -1; Object.keys(g.bk).filter((b) => BOOKS[b]).forEach((b) => { const r = g.bk[b]; if (r.sh != null && r.shP != null) { const h = pSpread(mu, r.sh); best = Math.max(best, h.win * ((1 - r.shP) / r.shP) - h.lose); } if (r.sh != null && r.saP != null) { const a = pSpreadAway(mu, -r.sh); best = Math.max(best, a.win * ((1 - r.saP) / r.saP) - a.lose); } if (r.tot != null && g.total != null && r.oP != null) { const t = pTotal(g.total, r.tot); best = Math.max(best, t.over * ((1 - r.oP) / r.oP) - t.under, t.under * ((1 - r.uP) / r.uP) - t.over); } }); return best; };
+  const sortedGames = [...games].sort((a, b) => gSort === "total" ? (b.total || 0) - (a.total || 0) : gSort === "edge" ? bestLineEv(b) - bestLineEv(a) : gSort === "mine" ? (mineTeams.has(b.home) || mineTeams.has(b.away) ? 1 : 0) - (mineTeams.has(a.home) || mineTeams.has(a.away) ? 1 : 0) : new Date(a.commence) - new Date(b.commence));
   const age = vegas && vegas.at ? Math.round((Date.now() - vegas.at) / 3600e3) : null;
   const open = bets.filter((b) => !b.result), settled = bets.filter((b) => b.result);
   const roi = settled.length ? settled.reduce((a, b) => a + (b.result === "W" ? b.stake * ((1 - b.priceP) / b.priceP) : b.result === "L" ? -b.stake : 0), 0) : 0;
@@ -2075,66 +2119,60 @@ function EdgeView({ week, vegas, vegasBusy, vegasErr, onVegas, apiBase, owner, o
     <>
       <div className="ebar">
         <div className="eb-l">{vegas && vegas.credits ? <><span className="cc"><b className="cond">{vegas.credits.remaining || "–"}</b> left</span><span className="cc muted">{vegas.credits.last || "~100"} last pull</span></> : <span className="cc muted">no lines yet</span>}<span className="cc muted">{fresh ? `${age < 1 ? "<1" : age}h old` : vegas && vegas.week !== week ? `week ${vegas.week} loaded` : ""}</span></div>
-        <div className="eb-r"><button className="btn sm" onClick={() => setHelp((v) => !v)} aria-label="How this works">?</button><button className="btn sm pri" onClick={() => onVegas(!fresh)} disabled={vegasBusy}>{vegasBusy ? "Pulling" : fresh ? "Refresh" : "Pull lines"}</button>{fresh && <button className="btn sm" onClick={() => onVegas(true)} disabled={vegasBusy} title="Ignore the four-hour cache">Force</button>}</div>
+        <div className="eb-r"><button className="btn sm pri" onClick={() => onVegas(!fresh)} disabled={vegasBusy}>{vegasBusy ? "Pulling" : fresh ? "Refresh" : "Pull lines"}</button>{fresh && <button className="btn sm" onClick={() => onVegas(true)} disabled={vegasBusy} title="Ignore the four-hour cache">Force</button>}</div>
       </div>
       {vegasErr && <div className="hint" style={{ color: "var(--stop)", padding: "0 4px 10px" }}>{vegasErr}</div>}
-      {help && <section className="card"><div className="hint">Consensus of DraftKings, FanDuel and BetMGM. A full pull with props costs about 100 credits and is cached four hours, so Tuesday, Saturday night and Sunday morning is plenty. Game lines give projected scores, win probability and line shopping. The priced edges are in props. Stakes are quarter Kelly against a {bankroll} bankroll, capped at 3%. Tap game cards to filter everything below to those games.</div></section>}
 
-      <section className="card"><div className="ch"><h2 className="cond">Games</h2><span className="aux">{fresh ? (sel.size ? <>{sel.size} selected <button className="lnk" onClick={() => setSel(new Set())}>clear</button></> : "tap to filter") : ""}</span></div>
-        {!fresh && <div className="empty">Pull the lines to see projected scores, win probability, weather and line shopping.</div>}
-        <div className="ggrid">{games.map((g) => <GameCard key={g.id} g={g} week={week} roster={roster} oppIds={oppIds} oppName={oppName} onAddLeg={onAddLeg} selected={sel.has(g.id)} onToggle={() => toggleSel(g.id)} dim={sel.size > 0 && !sel.has(g.id)} />)}</div>
-      </section>
+
+      {fresh && (
+        <section className="card picks"><div className="ch"><h2 className="cond">Best plays</h2><span className="aux">{selGames.length ? `${selGames.length} game${selGames.length > 1 ? "s" : ""} selected` : "this week"}</span></div>
+          {picks.length === 0 && <div className="empty">Nothing on the board clears the bar right now. That happens most weeks, and it is the honest answer.</div>}
+          {picks.map((e, i) => { const t = tierOf(e); const ep = edgePts(e); return (
+            <div key={e.key + e.mk} className="pick">
+              <div className="pkh"><span className="pkn cond">{i + 1}</span><Badge p={e.p} /><div style={{ minWidth: 0, flex: 1 }}><div className="pname"><span className="t">{e.p.n} {e.side} {e.line}</span></div><div className="psub">{e.mk}{e.price != null ? `, ${fmtPrice(e.price)}` : ""}{e.book ? ` at ${e.book}` : ""}, {e.game.replace("@", " @ ")}</div></div><div className="pkv"><b className={"cond tier " + (t || "").toLowerCase()}>{t}</b><small>edge {ep != null ? signed(ep) : "–"} pts</small></div></div>
+              <ul className="pkr">{e.reasons.map((r, j) => <li key={j}>{r}</li>)}</ul>
+              <div className="pkf"><span><b className="cond">{Math.round(e.pWin * 100)}%</b> our chance</span><span><b className="cond">{Math.round(e.fair * 100)}%</b> book's</span><span><b className="cond">${Math.round(e.stake)}</b> suggested</span><button className="btn sm pri" onClick={() => onAddLeg(e.leg)}>Add to slip</button></div>
+            </div>); })}
+        </section>
+      )}
 
       <SlipPanel slip={slip} bankroll={bankroll} onRemoveLeg={onRemoveLeg} onClear={onClearSlip} onLogBet={onLogBet} week={week} />
 
-      {fresh && picks.length > 0 && (
-        <section className="card picks"><div className="ch"><h2 className="cond">Dimes picks</h2><span className="aux">where the case is strongest</span></div>
-          {picks.map((e, i) => (
-            <div key={e.key + e.mk} className="pick">
-              <div className="pkh"><span className="pkn cond">{i + 1}</span><Badge p={e.p} /><div style={{ minWidth: 0, flex: 1 }}><div className="pname"><span className="t">{e.p.n}</span>{e.own && <span className={"pill " + (e.own === ME ? "me" : "own")}>{e.own === ME ? "Dimes" : e.own}</span>}</div><div className="psub">{e.game.replace("@", " @ ")}</div></div><div className="pkv"><b className="cond" style={{ color: e.side === "Under" ? "var(--stop)" : "var(--go)" }}>{e.side} {e.line}</b><small>{e.mk}, {fmtPrice(e.price)}{e.book ? ` ${e.book}` : ""}</small></div></div>
-              <ul className="pkr">{e.reasons.map((r, j) => <li key={j}>{r}</li>)}</ul>
-              <div className="pkf"><span><b className="cond">{Math.round(e.pWin * 100)}%</b> our chance</span><span><b className="cond">{signed(e.ev * 100)}%</b> EV</span><span><b className="cond">${Math.round(e.stake)}</b> quarter Kelly</span><button className="btn sm pri" onClick={() => onAddLeg(e.leg)}>Add to slip</button></div>
-            </div>))}
-          <div className="hint">A pick needs positive EV at the best available price, at least two books on the number, both projection sources present, and a projection at least 5% off the line. These are the strongest cases on the board, not guarantees; small, flat, and judged by closing line value.</div>
-        </section>
-      )}
+      <section className="card"><div className="ch"><h2 className="cond">Games</h2><span className="aux">{fresh ? <>{sel.size ? <><button className="lnk" onClick={() => setSel(new Set())}>clear {sel.size}</button> </> : null}<button className="lnk" onClick={() => setGamesOpen((v) => !v)}>{gamesOpen ? "collapse" : "expand"}</button></> : ""}</span></div>
+        {!fresh && <div className="empty">Pull the lines to see projected scores, win chances, weather and the best price at each book.</div>}
+        {fresh && gamesOpen && <div className="cb" style={{ paddingTop: 2, paddingBottom: 6 }}><div className="chips">{[["kick", "Kickoff"], ["total", "Highest total"], ["edge", "Best line"], ["mine", "My players"]].map(([k, l]) => <button key={k} className={"chip" + (gSort === k ? " on" : "")} onClick={() => setGSort(k)}>{l}</button>)}</div></div>}
+        {fresh && gamesOpen && <div className="ggrid">{sortedGames.map((g) => <GameCard key={g.id} g={g} week={week} roster={roster} oppIds={oppIds} oppName={oppName} onAddLeg={onAddLeg} selected={sel.has(g.id)} onToggle={() => toggleSel(g.id)} dim={sel.size > 0 && !sel.has(g.id)} />)}</div>}
+        {fresh && !gamesOpen && <div className="hint" style={{ paddingTop: 0 }}>{games.length} games collapsed. Tap expand to see cards, or select games to filter the plays.</div>}
+      </section>
 
-      {fresh && best.length > 0 && (
-        <section className="card"><div className="ch"><h2 className="cond">Positive EV</h2><span className="aux">at the best available price</span></div>
-          <div className="bestgrid">{best.map((e) => (
-            <div key={e.key + e.mk} className="bb">
-              <div className="bbh"><Badge p={e.p} /><div><div className="pname"><span className="t">{e.p.n}</span>{e.own === ME && <span className="pill me">Dimes</span>}</div><div className="psub">{e.game.replace("@", " @ ")}</div></div></div>
-              <div className="bbl"><span className={"side " + (e.side === "Under" ? "u" : "o")}>{e.side}</span><b className="cond">{e.line}</b><span className="mkt">{e.mk}</span><span className="pr cond">{fmtPrice(e.price)}{e.book && <small> {e.book}</small>}</span></div>
-              <div className="bbs"><span><b className="cond">{Math.round(e.pWin * 100)}%</b><small>our chance</small></span><span><b className="cond">{Math.round(e.fair * 100)}%</b><small>book's</small></span><span><b className="cond">{signed(e.ev * 100)}%</b><small>EV</small></span><span><b className="cond">${Math.round(e.stake)}</b><small>stake</small></span></div>
-              <div className="bbm">Model {e.model}, blended {e.mean}</div>
-              <div className="btns" style={{ padding: "8px 0 0" }}><button className="btn sm pri" onClick={() => onAddLeg(e.leg)}>Add to slip</button><button className="btn sm" onClick={() => onLogBet({ kind: "prop", key: e.key, player: e.p.n, game: e.game, mk: e.mk, side: e.side, line: e.line, price: e.price, priceP: e.priceP, pWin: e.pWin, stake: Math.round(e.stake) })}>Track ${Math.round(e.stake)}</button><button className="btn sm" onClick={() => onPlayer(e.p.id)}>Player</button></div>
-            </div>))}</div>
-        </section>
-      )}
-
-      <section className="card"><div className="ch"><h2 className="cond">Props</h2><span className="aux">{fresh ? `${priced.length} priced${selGames.length ? `, ${selGames.length} game${selGames.length > 1 ? "s" : ""}` : ""}` : ""}</span></div>
+      <section className="card"><div className="ch"><h2 className="cond">All plays</h2><span className="aux">{fresh ? <><span className="muted">{listed.length} shown</span> <button className="lnk" onClick={() => setPlaysOpen((v) => !v)}>{playsOpen ? "collapse" : "expand"}</button></> : ""}</span></div>
         {!fresh && <div className="empty">Pull the lines with props first.</div>}
-        {fresh && <div className="cb" style={{ paddingTop: 2, paddingBottom: 6 }}><div className="chips">{["ALL", "Pass yds", "Pass TD", "Rush yds", "Rec", "Rec yds", "Anytime TD"].map((x) => <button key={x} className={"chip" + (mk === x ? " on" : "")} onClick={() => setMk(x)}>{x === "ALL" ? "All" : x}</button>)}<button className={"chip hl" + (mineOnly ? " on" : "")} onClick={() => setMineOnly((v) => !v)}>My players</button><button className={"chip" + (showAll ? " on" : "")} onClick={() => setShowAll((v) => !v)}>{showAll ? "Showing all" : "Edges only"}</button></div></div>}
-        {fresh && listed.length === 0 && <div className="empty">Nothing clears the bar. Quiet board.</div>}
-        {listed.map((e, i) => (
+        {fresh && playsOpen && <div className="cb" style={{ paddingTop: 2, paddingBottom: 6 }}><div className="chips">{["ALL", "Pass yds", "Pass TD", "Rush yds", "Rec", "Rec yds", "Anytime TD"].map((x) => <button key={x} className={"chip" + (mk === x ? " on" : "")} onClick={() => setMk(x)}>{x === "ALL" ? "All" : x}</button>)}<button className={"chip hl" + (mineOnly ? " on" : "")} onClick={() => setMineOnly((v) => !v)}>My players</button><button className={"chip" + (showAll ? " on" : "")} onClick={() => setShowAll((v) => !v)}>{showAll ? "Everything" : "With an edge"}</button></div>
+          <div className="chips" style={{ marginTop: 6 }}>{[["edge", "Biggest edge"], ["ret", "Best return"], ["kick", "Kickoff"], ["name", "Player"]].map(([k, l]) => <button key={k} className={"chip" + (pSort === k ? " on" : "")} onClick={() => setPSort(k)}>{l}</button>)}</div></div>}
+        {fresh && playsOpen && listed.length === 0 && <div className="empty">Nothing clears the bar with these filters.</div>}
+        {fresh && playsOpen && listed.map((e, i) => { const t = tierOf(e); const ep = edgePts(e); const ol = openLine(week, e.key, e.field); const moved = ol != null && e.field !== "atd" && Math.abs(ol - e.line) >= 0.5; return (
           <div key={e.key + e.mk} className="prow acts in" style={{ animationDelay: `${Math.min(i, 12) * 25}ms` }}>
             <button className="rowhit rowbtn" onClick={() => onPlayer(e.p.id)}>
               <Badge p={e.p} />
-              <span><span className="pname"><span className="t">{e.p.n}</span>{e.own === ME && <span className="pill me">Dimes</span>}</span><span className="psub">{e.mk} <b>{e.line}</b>{e.price != null ? <span className="muted">{fmtPrice(e.price)}{e.nb > 1 ? ` (${e.nb} books)` : ""}</span> : null}<span className="muted">model {e.model}</span>{e.own && e.own !== ME ? <span className="muted">{e.own}</span> : null}</span></span>
+              <span><span className="pname"><span className="t">{e.p.n} <span className={e.side === "Under" ? "dnc" : "upc"}>{e.side} {e.line}</span></span>{t && <span className={"pill tier " + t.toLowerCase()}>{t}</span>}</span><span className="psub">{e.mk}{e.price != null ? <span>{fmtPrice(e.price)}{e.book ? ` ${e.book}` : ""}{e.nb > 1 ? `, ${e.nb} books` : ""}</span> : null}<span className="muted">{Math.round(e.pWin * 100)}% vs {e.fair != null ? Math.round(e.fair * 100) + "%" : "–"}</span>{moved && <span className={"mx " + ((e.side === "Over" && e.line > ol) || (e.side === "Under" && e.line < ol) ? "soft" : "tough")}>opened {ol}</span>}{e.own && e.own !== ME ? <span className="muted">{e.own}</span> : null}{e.own === ME && <span className="pill me">Dimes</span>}</span></span>
             </button>
-            <span className="pright"><span className="val cond"><div className="n" style={{ color: e.side === "Over" || e.side === "Yes" ? "var(--go)" : "var(--stop)" }}>{e.side}</div><div className="l">{e.ev != null ? `${signed(e.ev * 100)}% EV${e.book ? ` ${e.book}` : ""}` : `${Math.round(e.gap * 100)}% gap`}</div></span><button className="iconb add" onClick={() => onAddLeg(e.leg)} aria-label="Add to slip"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M12 5v14M5 12h14" /></svg></button></span>
-          </div>))}
-        {fresh && <div className="hint">Each line is priced the way the engine does it: the book's line and two-way price are inverted to a market mean, our stat projection (Fantasy Index plus PFF, matchup-adjusted) gets a 35% vote against it, then a fitted distribution (gamma for yards, negative binomial for catches, Poisson for touchdowns) gives the chance the side hits. EV uses the best price across DraftKings, FanDuel and BetMGM at the consensus line. Anytime TD strips a 7% hold from the Yes price. Tap + to build a slip.</div>}
+            <span className="pright"><span className="val cond"><div className="n" style={{ color: ep != null && ep > 0 ? "var(--go)" : "var(--ink3)" }}>{ep != null ? signed(ep) : "–"}</div><div className="l">edge pts</div></span><button className="iconb add" onClick={() => onAddLeg(e.leg)} aria-label="Add to slip"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2"><path d="M12 5v14M5 12h14" /></svg></button></span>
+          </div>); })}
+        {fresh && !playsOpen && <div className="hint" style={{ paddingTop: 0 }}>Collapsed. Expand to see every priced prop.</div>}
+      </section>
+
+      <section className="card"><div className="ch"><h2 className="cond">How to read this</h2><button className="lnk" onClick={() => setHelp((v) => !v)}>{help ? "hide" : "show"}</button></div>
+        {help && <div className="hint" style={{ paddingTop: 0 }}><b>Edge</b> is our chance minus the book's chance, in percentage points, using the best price at DraftKings, FanDuel or BetMGM. <b>Strong</b> means at least a 6% expected return with two or more books on the number and both projection sources behind it. <b>Good</b> is 3% or better. <b>Lean</b> is a small positive. Suggested stakes are a quarter of the Kelly criterion, capped at 3% of your bankroll. "Opened" shows where the line was on the first pull this week; a line moving toward our side means the market is agreeing. Even Strong plays lose about 40% of the time. Bet small and flat.</div>}
       </section>
 
       <section className="card"><div className="ch"><h2 className="cond">Tracked bets</h2><span className="aux">{settled.length ? `${settled.filter((b) => b.result === "W").length}-${settled.filter((b) => b.result === "L").length}${settled.some((b) => b.result === "P") ? `-${settled.filter((b) => b.result === "P").length}` : ""}, ${signed(roi)} on ${staked} staked` : `${open.length} open`}</span></div>
         {bets.length === 0 && <div className="empty">Nothing tracked. Tracking is manual and optional: it records our probability and the price at the time, and each later pull records the newest price so you can see closing line value on what you actually bet.</div>}
         {bets.slice(0, 30).map((b) => { const c = clvOf(b); return (
           <div key={b.id} className="betrow">
-            <div className="bl"><div className="pname"><span className="t">{b.player || b.game}</span><span className="pill own">{b.mk}</span></div><div className="psub"><b>{b.side}{b.line != null ? ` ${b.line}` : ""}</b>{b.price != null ? <span>{fmtPrice(b.price)}</span> : null}<span className="muted">${b.stake}</span><span className="muted">wk {b.week}</span>{b.close && b.close.line != null && b.close.line !== b.line ? <span className="muted">now {b.close.line}</span> : null}{c != null && <span className={c > 0.005 ? "clv up" : c < -0.005 ? "clv dn" : "muted"}>CLV {signed(c * 100)}</span>}</div></div>
+            <div className="bl"><div className="pname"><span className="t">{b.player || b.game}</span><span className="pill own">{b.mk}</span></div><div className="psub"><b>{b.side}{b.line != null ? ` ${b.line}` : ""}</b>{b.price != null ? <span>{fmtPrice(b.price)}</span> : null}<span className="muted">${b.stake}</span><span className="muted">wk {b.week}</span>{b.close && b.close.line != null && b.close.line !== b.line ? <span className="muted">now {b.close.line}</span> : null}{c != null && <span className={c > 0.005 ? "clv up" : c < -0.005 ? "clv dn" : "muted"}>{c > 0.005 ? "market moved your way" : c < -0.005 ? "market moved against you" : "no move"} {signed(c * 100)}</span>}</div></div>
             <div className="br">{b.result ? <span className={"res " + b.result}>{b.result === "W" ? "Won" : b.result === "L" ? "Lost" : "Push"}</span> : <><button className="btn sm" onClick={() => onSettle(b.id, "W")}>W</button><button className="btn sm" onClick={() => onSettle(b.id, "L")}>L</button><button className="btn sm" onClick={() => onSettle(b.id, "P")}>P</button></>}<button className="iconb" onClick={() => onRemove(b.id)} aria-label="Remove">✕</button></div>
           </div>); })}
-        {bets.length > 0 && <div className="hint">Closing line value is the honest scoreboard. If the price on your side keeps getting shorter after you bet, the process is working, whatever the results say this month.</div>}
+        {bets.length > 0 && <div className="hint">If the market keeps moving your way after you bet, the process works, whatever this month's results say.</div>}
       </section>
     </>
   );
