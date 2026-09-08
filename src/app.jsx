@@ -30,6 +30,7 @@ function normName(n) { return n.normalize("NFKD").replace(/[\u0300-\u036f]/g, ""
 let VEGAS = null; // set from state on each render
 let MY_BOOKS = ["FD", "MGM"]; let MODEL_W_LIVE = 0.35;
 let HEALTH = null; let USAGE = null;
+function actualPts(p, week) { const u = usageOf(p); if (!u || !u.wk || !u.wk[week]) return null; return u.wk[week].fp; }
 function usageOf(p) { if (!USAGE || !USAGE.players || !p) return null; return USAGE.players[hkey(p)] || null; } // { at, status: {key:{st,dc}}, injuries: [...] } from /api/players (nflverse official reports)
 const hkey = (p) => normName(p.n) + "|" + p.p;
 function healthOf(p) { if (!HEALTH || !p || p.p === "DEF") return null; const k = hkey(p); const sl = HEALTH.health && HEALTH.health[k]; const of = HEALTH.official && HEALTH.official[k]; const own = HEALTH.own && HEALTH.own[k]; const add = HEALTH.trend && HEALTH.trend.add ? HEALTH.trend.add[k] : null; const drop = HEALTH.trend && HEALTH.trend.drop ? HEALTH.trend.drop[k] : null; if (!sl && !of && !own && add == null && drop == null) return null; return { sl, of, own, add, drop }; }
@@ -65,6 +66,8 @@ const TEAM_BYE = {};
 TEAMS.forEach((t) => { for (let w = 5; w <= 14; w++) { if (!NFL[w][t]) { TEAM_BYE[t] = w; break; } } });
 
 const ME = "Donnie Dimes";
+// Colors pulled from each team's Yahoo avatar; monograms in place of the avatars themselves
+const LEAGUE_STYLE = { "Donnie Dimes": { bg: "#0B2265", fg: "#FFFFFF", mono: "DD", logo: true }, "Spictaculous": { bg: "#C8102E", fg: "#FFFFFF", mono: "SPC" }, "Team Riggo": { bg: "#111111", fg: "#C9A227", mono: "RIG" }, "SOULTRAIN": { bg: "#1B8A3C", fg: "#0B1F12", mono: "SOUL" }, "Nothing Else Matters": { bg: "#5B2A86", fg: "#F2A7CF", mono: "NEM" }, "The Manglers": { bg: "#1A1A1A", fg: "#B8BEC8", mono: "MNG" }, "Underdog": { bg: "#B3261E", fg: "#F6E9D6", mono: "UDG" }, "The Fun Brunch": { bg: "#1E5BB8", fg: "#7DE39A", mono: "FUN" }, "What Would Breesus Do": { bg: "#D0021B", fg: "#FFFFFF", mono: "WWBD" }, "USC_Nemo": { bg: "#5A2E8C", fg: "#F5A54A", mono: "NEMO" }, "2 Cups of Rice": { bg: "#7A3FA0", fg: "#FFFFFF", mono: "2CR" }, "BIG DADDY": { bg: "#2E8B57", fg: "#DFF5E6", mono: "BIG" }, "Brafferton Beast II": { bg: "#C62828", fg: "#9CC0FF", mono: "BBII" }, "Knappachino": { bg: "#E0B23C", fg: "#2A2000", mono: "KNAP" } };
 const LEAGUE_TEAMS = Object.keys(TEAMS_INIT);
 const SLOTS = [
   { k: "QB", label: "QB", elig: ["QB"] }, { k: "RB1", label: "RB", elig: ["RB"] }, { k: "RB2", label: "RB", elig: ["RB"] },
@@ -716,6 +719,19 @@ textarea.notes{min-height:120px;resize:vertical;line-height:1.5}
 .toast .in button{color:#FF8DA1;font-weight:800;flex:none;text-transform:uppercase;letter-spacing:.1em;font-size:12px}
 .dark .toast .in button{color:var(--red)}
 
+/* ---- Team marks, jersey, news ---- */
+.tmark{display:inline-grid;place-items:center;border-radius:9px;position:relative;overflow:hidden;flex:none;vertical-align:middle;margin-right:8px;box-shadow:inset 0 -2px 0 rgba(0,0,0,.25),inset 0 1px 0 rgba(255,255,255,.18)}
+.tmark i{position:absolute;left:-40%;top:60%;width:180%;height:3px;transform:rotate(-24deg);opacity:.35}
+.tmark b{position:relative;font-weight:900;font-style:italic;letter-spacing:.02em;line-height:1}
+.tmark.logo img{width:88%;height:auto;display:block}
+.strow .nm .t{display:flex;align-items:center}
+.mu2 .side .tm{display:inline-flex;align-items:center}
+.nrow{border-top:1px solid var(--rule);padding:6px 16px 8px}
+.nrow .rowhit{padding:4px 0}
+.ntext{font-size:13.5px;line-height:1.5;color:var(--ink);padding:2px 0 0 56px;cursor:pointer}
+.ntext.clip{display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.sortrow{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-top:6px}
+.sortrow .lab{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);margin-right:2px}
 /* ---- Checklist, sources, polish ---- */
 .prog{height:6px;background:var(--surface3);margin:0 16px 8px;border-radius:3px;overflow:hidden}
 .prog i{display:block;height:100%;background:var(--go);border-radius:3px;transition:width .5s}
@@ -1010,6 +1026,17 @@ textarea.notes{min-height:120px;resize:vertical;line-height:1.5}
 // =============================================================================
 // PRIMITIVES
 // =============================================================================
+function TeamMark({ team, size }) {
+  const st = LEAGUE_STYLE[team] || { bg: "#5A657D", fg: "#fff", mono: (team || "?").slice(0, 3).toUpperCase() };
+  const sz = size || 34;
+  if (st.logo) return <span className="tmark logo" style={{ width: sz, height: sz, background: st.bg }}><img src={LOGO} alt={team} /></span>;
+  const fs = st.mono.length >= 4 ? sz * 0.3 : sz * 0.36;
+  return <span className="tmark" style={{ width: sz, height: sz, background: st.bg, color: st.fg }} title={team}><i style={{ background: st.fg }} /><b className="cond" style={{ fontSize: fs }}>{st.mono}</b></span>;
+}
+function Jersey({ num, team, size }) {
+  const st = TEAM_STYLE[team] || { bg: "#5A657D", text: "#fff", line: "#C9D0DF" }; const sz = size || 44;
+  return (<svg width={sz} height={sz} viewBox="0 0 44 44" aria-label={num ? `number ${num}` : ""}><path d="M14 4 L22 8 L30 4 L40 10 L36 17 L32 15 L32 40 L12 40 L12 15 L8 17 L4 10 Z" fill={st.bg} stroke={st.line} strokeWidth="1.5" strokeLinejoin="round" /><text x="22" y="30" textAnchor="middle" fontFamily="'Archivo','Avenir Next Condensed',sans-serif" fontWeight="900" fontSize={num && String(num).length > 1 ? 14 : 16} fill={st.text}>{num || ""}</text></svg>);
+}
 function Sheet({ title, sub, onClose, children }) {
   const [closing, setClosing] = useState(false); const timer = useRef(null);
   const close = useCallback(() => { if (REDUCE) { onClose(); return; } setClosing(true); timer.current = setTimeout(onClose, 200); }, [onClose]);
@@ -1302,7 +1329,7 @@ export default function App() {
         {tab === "home" && <HomeView week={week} actions={actions} lineup={lineup} isSaved={isSaved} byId={byId} bench={bench} irList={irList} myTotal={myTotal} opp={opp} oppName={oppName} res={resThis} vegas={state.vegas} vegasBusy={vegasBusy} vegasErr={vegasErr} onVegas={pullVegas} apiBase={apiBase}
           onResult={(f, v) => setResult(week, f, v)} onSlot={(k) => setSheet({ type: "slot", slot: k })} onAuto={() => { autoFill(); showToast(`Week ${week} set to projected best.`); }} onResetAuto={resetAuto} onPlayer={openPlayer}
           onCoach={() => askCoach(`Set my best Week ${week} lineup vs ${oppName}. Check injury news first.`)} onTeam={() => oppIds && setSheet({ type: "team", team: oppName })} checklist={(state.checklist || {})[week] || {}} onCheck={(id) => update((s) => { const cl = { ...(s.checklist || {}) }; const w = { ...(cl[week] || {}) }; w[id] = !w[id]; cl[week] = w; return { ...s, checklist: cl }; })} scores={state.scores || {}} />}
-        {tab === "team" && <TeamView roster={roster} active={active} irList={irList} week={week} myRank={myRank} rec={rec} results={results} notes={state.notes} limit={ROSTER_LIMIT} onPlayer={openPlayer} onNotes={setNotes} />}
+        {tab === "team" && <TeamView roster={roster} active={active} irList={irList} week={week} myRank={myRank} rec={rec} results={results} notes={state.notes} limit={ROSTER_LIMIT} onPlayer={openPlayer} onNotes={setNotes} owner={owner} oppName={oppName} />}
         {tab === "market" && <MarketView week={week} freeAgents={freeAgents} upgrades={upgrades} worstAt={worstAt} watch={state.watch} onWatch={toggleWatch} onAdd={(pl) => setSheet({ type: "add", pick: pl })} onPlayer={openPlayer} power={power} onTeam={(t) => setSheet({ type: "team", team: t })} log={state.log} onImport={() => setSheet({ type: "import" })} onLogOne={() => setSheet({ type: "add" })} />}
         {tab === "league" && <LeagueView week={week} power={power} standings={standings} sim={sim} scores={state.scores || {}} owner={owner} playoffTeams={settings.playoffTeams || 6} onTeam={(t) => setSheet({ type: "team", team: t })} onPlayer={openPlayer} onScores={() => setSheet({ type: "scores" })} />}
         {tab === "edge" && <EdgeView week={week} vegas={state.vegas} vegasBusy={vegasBusy} vegasErr={vegasErr} onVegas={pullVegas} apiBase={apiBase} owner={owner} onPlayer={openPlayer} roster={active} oppName={oppName} oppIds={oppIds} bankroll={settings.bankroll || 500} bets={state.bets || []} onLogBet={logBet} onSettle={settleBet} onRemove={removeBet} slip={state.slip || []} onAddLeg={addLeg} onRemoveLeg={removeLeg} onClearSlip={clearSlip} />}
@@ -1327,7 +1354,7 @@ export default function App() {
       {sheet && sheet.type === "add" && <AddSheet pick={sheet.pick} active={active} week={week} owner={owner} limit={ROSTER_LIMIT} onAdd={(pl, dropId) => { addPlayer(pl, dropId); setSheet(null); }} onClose={() => setSheet(null)} />}
       {sheet && sheet.type === "team" && state.teams[sheet.team] && <TeamSheet team={sheet.team} ids={state.teams[sheet.team]} week={week} power={power} freeAgents={freeAgents} onTrade={() => setSheet({ type: "trade", team: sheet.team })} onAdd={(pl) => teamAdd(sheet.team, pl)} onDrop={(id) => teamDrop(sheet.team, id)} onPlayer={openPlayer} onClose={() => setSheet(null)} />}
       {sheet && sheet.type === "trade" && state.teams[sheet.team] && <TradeSheet team={sheet.team} theirIds={state.teams[sheet.team]} active={active} want={sheet.want} limit={ROSTER_LIMIT} onExecute={(give, get) => { executeTrade(sheet.team, give, get); setSheet(null); }} onAsk={askCoach} onClose={() => setSheet(null)} />}
-      {sheet && sheet.type === "scores" && <ScoresSheet week={week} scores={state.scores || {}} onScore={setScore} onClose={() => setSheet(null)} />}
+      {sheet && sheet.type === "scores" && <ScoresSheet week={week} scores={state.scores || {}} onScore={setScore} onClose={() => setSheet(null)} teams={state.teams} myIds={active.map((p) => p.id)} myLineup={state.lineups[week] || null} />}
       {sheet && sheet.type === "import" && <ImportSheet seen={state.txSeen || []} onApply={(mv) => { applyMoves(mv); setSheet(null); }} onClose={() => setSheet(null)} />}
       {sheet && sheet.type === "menu" && <MenuSheet state={state} settings={settings} onSettings={setSettings} onReset={resetAll} onImport={importJSON} onClose={() => setSheet(null)} />}
     </div>
@@ -1405,7 +1432,7 @@ function HomeView({ week, actions, lineup, isSaved, byId, bench, irList, myTotal
         <div className="side"><div><div className="who cond">Dimes</div><div className="sub">{isSaved ? "Your lineup" : "Auto lineup"}</div></div><div className="tot cond">{fmt1(myT)}</div></div>
         {opp ? (<>
           <div className="bars"><i className="m" style={{ width: `${(myTotal / tot) * 100}%` }} /><i className="t" style={{ width: `${(opp.total / tot) * 100}%` }} /></div>
-          <div className="side"><div><div className="who cond">{oppName}</div><div className="sub">Their best lineup{opp.onBye.length ? `, ${opp.onBye.length} on bye` : ""}</div></div><div className="tot cond">{fmt1(opT)}</div></div>
+          <div className="side"><div style={{ display: "flex", gap: 10, alignItems: "center", minWidth: 0 }}><TeamMark team={oppName} size={36} /><div style={{ minWidth: 0 }}><div className="who cond">{oppName}</div><div className="sub">Their best lineup{opp.onBye.length ? `, ${opp.onBye.length} on bye` : ""}</div></div></div><div className="tot cond">{fmt1(opT)}</div></div>
           <div className="edge">{Math.abs(edge) < 3 ? <span>Coin flip on paper, <b>{fmt1(Math.abs(edge))}</b> apart.</span> : edge > 0 ? <span>You project ahead by <b>{fmt1(edge)}</b>.</span> : <span>They project ahead by <b>{fmt1(-edge)}</b>.</span>}{opp.onBye.length >= 3 && <span> Their bye week is your opening.</span>}</div>
           <div className="btns"><button className="btn sm" onClick={() => setShowOpp((v) => !v)}>{showOpp ? "Hide their lineup" : "Their lineup"}</button><button className="btn sm" onClick={onTeam}>Scout {oppName}</button></div>
           {showOpp && SLOTS.map((s) => { const p = opp.L[s.k] ? opp.byId[opp.L[s.k]] : null; return p ? <PRow key={s.k} p={p} week={week} badge={<Badge slot={s.label} p={p} />} onClick={() => onPlayer(p.id)} right={<Val p={p} week={week} />} /> : <div key={s.k} className="prow dim"><Badge slot={s.label} empty /><span className="pname">Nobody available</span><span /></div>; })}
@@ -1478,7 +1505,7 @@ function PlayerSheet({ p, mine, ownerName, week, irCount, watched, onStatus, onN
     <Sheet title={p.n} sub={`${p.p}, ${p.t}, bye ${p.b}. ${isFA ? "Free agent" : other ? `On ${ownerName}` : p.via ? `Yours via ${p.via.toLowerCase()}` : "Yours"}. ADP ${p.a < 300 ? p.a : "undrafted"}.`} onClose={onClose}>
       {(() => { const b = p.bio; const h = healthOf(p); const es = effStatus(p); const bd = wkBreakdown(p, week); const m = matchup(p.t, week); const seasonSrc = [p.pwF != null && `Fantasy Index ${fmt1(p.pwF)}`, p.pwB != null && `Footballguys ${fmt1(p.pwB)}`, p.pwP != null && `PFF ${fmt1(p.pwP)}`].filter(Boolean); return (
         <div className="phero">
-          <div className="pht">{b && b.hs ? <img className="hsh" src={b.hs} alt="" onError={(e) => { e.target.style.display = "none"; }} /> : null}<Badge p={p} />
+          <div className="pht">{b && b.hs ? <img className="hsh" src={b.hs} alt="" onError={(e) => { e.target.style.display = "none"; }} /> : null}{b && b.num ? <Jersey num={b.num} team={p.t} size={46} /> : <Badge p={p} />}
             <div className="phn"><div className="pbig cond">{bd.parts.length ? fmt1(bd.v) : hasProj(p) ? fmt1(pw(p)) : "n/a"}</div><div className="lab">{bd.parts.length ? `This week, ${m.bye ? "bye" : m.text}` : "Per week, rest of season"}</div></div>
             {hasProj(p) && bd.parts.length > 0 && <div className="phn r"><div className="pmid cond">{fmt1(pw(p))}</div><div className="lab">Per week, rest of season</div></div>}
           </div>
@@ -1544,7 +1571,42 @@ function AddSheet({ pick, active, week, owner, limit, onAdd, onClose }) {
 // =============================================================================
 // TEAM
 // =============================================================================
-function TeamView({ roster, active, irList, week, myRank, rec, results, notes, limit, onPlayer, onNotes }) {
+function timeAgo(ms) { if (!ms) return ""; const d = Date.now() - ms; if (d < 3600e3) return `${Math.max(1, Math.round(d / 60e3))}m ago`; if (d < 86400e3) return `${Math.round(d / 3600e3)}h ago`; return `${Math.round(d / 86400e3)}d ago`; }
+function NewsCenter({ week, roster, owner, oppName, onPlayer }) {
+  const [q, setQ] = useState(""); const [f, setF] = useState("all"); const [pos, setPos] = useState("ALL"); const [openIdx, setOpenIdx] = useState({});
+  const items = useMemo(() => {
+    const out = [];
+    POOL.forEach((p) => { const h = healthOf(p); if (!h) return;
+      const sl = h.sl; if (sl && (sl.inj || (sl.st && !/^Active/i.test(sl.st)))) out.push({ ts: sl.nu || 0, p, kind: "inj", head: `${sl.inj || sl.st}${sl.part ? `, ${sl.part.toLowerCase()}` : ""}`, text: [sl.prac ? `Practice: ${sl.prac.toLowerCase()}.` : null, sl.note || null, sl.since ? `Since ${sl.since}.` : null].filter(Boolean).join(" "), src: "Sleeper" });
+      const of = h.of; if (of && (of.status || of.injury) && !(sl && sl.inj)) out.push({ ts: 0, p, kind: "report", head: `${of.status || "On the report"}${of.injury ? `, ${of.injury.toLowerCase()}` : ""}`, text: of.practice ? of.practice.replace("Participation in Practice", "practice").replace("In Practice", "practice") + "." : "", src: "Official report" });
+      if (h.add != null && h.add >= 500) out.push({ ts: 0, p, kind: "trend", head: `+${h.add.toLocaleString()} adds on Sleeper in 24h`, text: h.own ? `${h.own.pct}% rostered on ESPN.` : "", src: "Sleeper" });
+    });
+    const seen = new Set(); roster.forEach((p) => newsFor(p).forEach((n) => { if (!seen.has(n.x)) { seen.add(n.x); out.push({ ts: 0, p, kind: "note", head: "", text: n.x, src: "Fantasy Index, Sept 7" }); } }));
+    return out;
+  }, [roster, HEALTH && HEALTH.at]);
+  const oppTeamIds = new Set();
+  const list = items.filter((it) => { const o = owner[it.p.id]; if (f === "mine" && o !== ME) return false; if (f === "fa" && o) return false; if (f === "opp" && o !== oppName) return false; if (f === "inj" && it.kind !== "inj" && it.kind !== "report") return false; return true; })
+    .filter((it) => pos === "ALL" || it.p.p === pos)
+    .filter((it) => { const s0 = q.trim().toLowerCase(); if (!s0) return true; return it.p.n.toLowerCase().includes(s0) || it.p.t.toLowerCase().includes(s0) || (owner[it.p.id] || "").toLowerCase().includes(s0) || it.text.toLowerCase().includes(s0) || it.head.toLowerCase().includes(s0); })
+    .sort((a, b) => (b.ts || 0) - (a.ts || 0) || (owner[b.p.id] === ME) - (owner[a.p.id] === ME) || pw(b.p) - pw(a.p)).slice(0, 120);
+  return (
+    <section className="card"><div className="ch"><h2 className="cond">News</h2><span className="aux">{HEALTH && HEALTH.at ? `synced ${timeAgo(HEALTH.at)}` : "sync needs the web version"}</span></div>
+      <div className="cb" style={{ paddingTop: 2, paddingBottom: 8 }}>
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search player, NFL team, or league team" />
+        <div className="chips" style={{ marginTop: 8 }}>{[["all", "All"], ["mine", "My team"], ["opp", `vs ${oppName}`], ["fa", "Free agents"], ["inj", "Injuries only"]].map(([k, l]) => <button key={k} className={"chip" + (f === k ? " on" : "")} onClick={() => setF(k)}>{l}</button>)}</div>
+        <div className="chips" style={{ marginTop: 6 }}>{["ALL", ...POS_LIST.filter((x) => x !== "DEF")].map((x) => <button key={x} className={"chip" + (pos === x ? " on" : "")} onClick={() => setPos(x)}>{x === "ALL" ? "Any position" : x}</button>)}</div>
+      </div>
+      {list.length === 0 && <div className="empty">{items.length === 0 ? "No health feed yet. It syncs from Sleeper and the official report on the web version." : "Nothing matches."}</div>}
+      {list.map((it, i) => { const o = owner[it.p.id]; return (
+        <div key={i} className="nrow">
+          <button className="rowhit rowbtn" onClick={() => onPlayer(it.p.id)}><Badge p={it.p} /><span><span className="pname"><span className="t">{it.p.n}</span>{o ? <span className={"pill " + (o === ME ? "me" : "own")}>{o === ME ? "Dimes" : o}</span> : <span className="pill up">FA</span>}<span className={"pill " + (it.kind === "inj" || it.kind === "report" ? effStatus(it.p) === "o" ? "o" : effStatus(it.p) === "d" ? "d" : "q" : it.kind === "trend" ? "up" : "own")}>{it.kind === "trend" ? "Trending" : it.kind === "note" ? "Note" : it.head.split(",")[0]}</span></span><span className="psub">{it.p.p} {it.p.t}{it.head ? <b>{it.head}</b> : null}<span className="muted">{it.src}{it.ts ? `, ${timeAgo(it.ts)}` : ""}</span></span></span></button>
+          {it.text && <div className={"ntext" + (openIdx[i] ? "" : " clip")} onClick={() => setOpenIdx((o2) => ({ ...o2, [i]: !o2[i] }))}>{it.text}</div>}
+        </div>); })}
+      <div className="hint">Sleeper updates during the day; the official report posts Wednesday to Friday; Fantasy Index notes are the weekly write-up. Tap a player for the full card.</div>
+    </section>
+  );
+}
+function TeamView({ roster, active, irList, week, myRank, rec, results, notes, limit, onPlayer, onNotes, owner, oppName }) {
   const [openNews, setOpenNews] = useState({});
   const [sec, setSec] = useState("roster");
   const counts = {}; active.forEach((p) => { counts[p.p] = (counts[p.p] || 0) + 1; });
@@ -1586,10 +1648,7 @@ function TeamView({ roster, active, irList, week, myRank, rec, results, notes, l
         <div className="hint">Opponent defense rank by position from FFI projected yards allowed. Green is soft, red is tough. This-week values in the app already lean up to 10% on these.</div>
       </section>)}
 
-      {sec === "news" && (<section className="card"><div className="ch"><h2 className="cond">News on your guys</h2><span className="aux">Fantasy Index, Sept 7</span></div>
-        {news.length === 0 && <div className="empty">Nothing in the Sept 7 notes mentions your roster.</div>}
-        {news.map(({ p, n }, i) => <button key={i} className={"nitem" + (openNews[i] ? "" : " clip")} onClick={() => setOpenNews((o) => ({ ...o, [i]: !o[i] }))}><div className="who">{p.n}<span>{p.p} {p.t}</span></div><p>{n.x}</p></button>)}
-      </section>)}
+      {sec === "news" && <NewsCenter week={week} roster={roster} owner={owner} oppName={oppName} onPlayer={onPlayer} />}
 
       {sec === "byes" && (<section className="card"><div className="ch"><h2 className="cond">Bye week map</h2><span className="aux">current roster</span></div>
         {[5, 6, 7, 8, 9, 10, 11, 13, 14].map((w) => { const out = active.filter((p) => matchup(p.t, w).bye).sort((a, b) => pw(b) - pw(a)); return (
@@ -1689,7 +1748,7 @@ function LeagueView({ week, power, standings, sim, scores, owner, playoffTeams, 
         {standings.map((x) => { const o = sim ? sim[x.team] : null; return (
           <button key={x.team} className={"strow" + (x.team === ME ? " mine" : "")} onClick={() => x.team !== ME && onTeam(x.team)}>
             <span className="rk cond">{x.rank}</span>
-            <span className="nm"><span className="t">{x.team}</span>{x.streak && <small>{x.streak}</small>}</span>
+            <span className="nm"><span className="t"><TeamMark team={x.team} size={26} />{x.team}</span>{x.streak && <small>{x.streak}</small>}</span>
             <span className="cond wl">{x.w}-{x.l}{x.t ? `-${x.t}` : ""}</span>
             <span className="cond">{x.pf.toFixed(1)}</span>
             <span className="cond muted pa">{x.pa.toFixed(1)}</span>
@@ -1703,7 +1762,7 @@ function LeagueView({ week, power, standings, sim, scores, owner, playoffTeams, 
         {power.map((r) => { const o = sim ? sim[r.team] : null; return (
           <button key={r.team} className={"prow tap rowbtn" + (r.team === ME ? " mine" : "")} onClick={() => r.team !== ME && onTeam(r.team)}>
             <span className="rk cond">{r.rank}</span>
-            <span><span className="pname"><span className="t">{r.team}</span></span><span className="posbars">{["QB", "RB", "WR", "TE"].map((g) => { const v = posStrength(r, g); const d = v - avg[g]; return <span key={g}>{g}<i><b className={d > 0.75 ? "up" : d < -0.75 ? "dn" : ""} style={{ width: `${(v / maxPos[g]) * 100}%` }} /></i></span>; })}</span></span>
+            <span><span className="pname"><TeamMark team={r.team} size={28} /><span className="t">{r.team}</span></span><span className="posbars">{["QB", "RB", "WR", "TE"].map((g) => { const v = posStrength(r, g); const d = v - avg[g]; return <span key={g}>{g}<i><b className={d > 0.75 ? "up" : d < -0.75 ? "dn" : ""} style={{ width: `${(v / maxPos[g]) * 100}%` }} /></i></span>; })}</span></span>
             <span className="pright"><span className="val cond"><div className="n">{fmt1(r.total)}</div>{o && <div className="l">{o.expW.toFixed(1)} exp wins</div>}</span>{r.team !== ME && <span className="chev">›</span>}</span>
           </button>); })}
         <div className="hint">Each team's best lineup from the blended projections, byes ignored. Bars are position strength vs the league. Tap a team to scout or build a trade.</div>
@@ -1713,9 +1772,9 @@ function LeagueView({ week, power, standings, sim, scores, owner, playoffTeams, 
         {matchups.length === 0 && <div className="empty">Playoff matchups depend on seeding.</div>}
         {matchups.map((m) => { const fin = m.sa != null && m.sb != null; const aWin = fin ? parseFloat(m.sa) > parseFloat(m.sb) : m.wp >= 0.5; return (
           <div key={m.a} className={"mu2" + (m.a === ME || m.b === ME ? " mine" : "")}>
-            <div className="side"><span className={"tm" + (aWin ? " w" : "")}>{m.a}</span><span className="cond n">{fin ? m.sa : fmt1(m.pa)}</span></div>
+            <div className="side"><span className={"tm" + (aWin ? " w" : "")}><TeamMark team={m.a} size={24} />{m.a}</span><span className="cond n">{fin ? m.sa : fmt1(m.pa)}</span></div>
             <div className="bar"><i style={{ width: `${Math.round(m.wp * 100)}%` }} /></div>
-            <div className="side"><span className={"tm" + (!aWin ? " w" : "")}>{m.b}</span><span className="cond n">{fin ? m.sb : fmt1(m.pb)}</span></div>
+            <div className="side"><span className={"tm" + (!aWin ? " w" : "")}><TeamMark team={m.b} size={24} />{m.b}</span><span className="cond n">{fin ? m.sb : fmt1(m.pb)}</span></div>
             <div className="wp">{fin ? "Final" : `${Math.round(m.wp * 100)}% ${m.a === ME ? "you" : lastWord(m.a)} / ${100 - Math.round(m.wp * 100)}% ${m.b === ME ? "you" : lastWord(m.b)}`}</div>
           </div>); })}
       </section>
@@ -1730,12 +1789,13 @@ function LeagueView({ week, power, standings, sim, scores, owner, playoffTeams, 
   );
 }
 function lastWord(t) { const w = t.split(" "); return w[w.length - 1].length > 2 ? w[w.length - 1] : t; }
-function ScoresSheet({ week, scores, onScore, onClose }) {
+function ScoresSheet({ week, scores, onScore, onClose, teams, myIds, myLineup }) {
   const [w, setW] = useState(Math.min(week, REG_WEEKS));
   const done = new Set(); const games = []; LEAGUE_TEAMS.forEach((a) => { const b = LSCHED[w][a]; if (done.has(a)) return; done.add(a); done.add(b); games.push([a, b]); });
   const sc = scores[w] || {};
   return (
     <Sheet title="Enter scores" sub="Final scores from Yahoo, all seven games. Standings and playoff odds update as you type." onClose={onClose}>
+      {USAGE && USAGE.weeks && USAGE.weeks.includes(w) && <div className="btns" style={{ paddingTop: 4 }}><button className="btn" onClick={() => games.forEach(([a, b]) => { [a, b].forEach((t) => { const ids = t === ME ? (myIds || []) : (teams[t] || []); const ps = ids.map((id) => POOL_BY_ID[id]).filter(Boolean); const L = t === ME && myLineup ? myLineup : bestLineup(ps, w); const byId = Object.fromEntries(ps.map((p) => [p.id, p])); const tot = SLOTS.reduce((acc, s0) => { const p = L[s0.k] ? byId[L[s0.k]] : null; const v = p ? actualPts(p, w) : null; return acc + (v || 0); }, 0); onScore(w, t, Math.round(tot * 100) / 100); }); })}>Fill from NFL stats (estimate)</button><span className="hint" style={{ padding: "6px 0 0" }}>Uses each team's best projected lineup, or your saved one, against the week's real stat lines. Kickers and defenses are not scored yet, and other teams' actual starters are unknown, so confirm against Yahoo.</span></div>}
       <div className="cb" style={{ paddingTop: 4 }}><div className="chips">{Array.from({ length: REG_WEEKS }, (_, i) => i + 1).map((x) => <button key={x} className={"chip" + (w === x ? " on" : "")} onClick={() => setW(x)}>W{x}</button>)}</div></div>
       <div className="card">{games.map(([a, b]) => (
         <div key={a} className="scrow">
@@ -1757,7 +1817,7 @@ function TeamSheet({ team, ids, week, power, freeAgents, onTrade, onAdd, onDrop,
   const faMatches = q.trim() ? freeAgents.filter((p) => p.n.toLowerCase().includes(q.trim().toLowerCase())).slice(0, 8) : [];
   const sub = (p) => draft[p.id] ? `pick ${draft[p.id]}` : "pickup";
   return (
-    <Sheet title={team} sub={r ? `#${r.rank} of 14, ${fmt1(r.total)} per week at full strength. ${players.length} rostered.` : ""} onClose={onClose}>
+    <Sheet title={<span style={{ display: "inline-flex", alignItems: "center", gap: 10 }}><TeamMark team={team} size={34} />{team}</span>} sub={r ? `#${r.rank} of 14, ${fmt1(r.total)} per week at full strength. ${players.length} rostered.` : ""} onClose={onClose}>
       <div className="btns" style={{ paddingTop: 4 }}><button className="btn pri" onClick={onTrade}>Build a trade</button><button className={"btn" + (edit ? " hl" : "")} onClick={() => setEdit((v) => !v)}>{edit ? "Done" : "Log their move"}</button></div>
       {edit && (<><div className="srch"><input autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Free agent they picked up" /></div>{faMatches.length > 0 && <div className="card">{faMatches.map((p) => <PRow key={p.id} p={p} week={week} onClick={() => { onAdd(p); setQ(""); }} right={<><Val p={p} label="per wk" /><span className="pill up">Add</span></>} />)}</div>}<div className="hint">Tap Dropped on anyone they cut. This mirrors Yahoo so the Wire stays honest.</div></>)}
       {byeCrunch.length > 0 && <div className="hint">Bye crunches: {byeCrunch.map((x) => `Week ${x.w} (${x.n})`).join(", ")}.</div>}
@@ -2160,7 +2220,7 @@ function EdgeView({ week, vegas, vegasBusy, vegasErr, onVegas, apiBase, owner, o
   const priced = selGames.length ? pricedAll.filter((e) => selGames.includes(e.game)) : pricedAll;
   const picks = useMemo(() => picksFrom(priced, games), [priced, games]);
   const best = priced.filter((e) => e.ev != null && e.ev > 0.02 && e.pWin > 0.45).slice(0, 6);
-  const listed = priced.filter((e) => mk === "ALL" || e.mk === mk).filter((e) => !mineOnly || e.own === ME).filter((e) => showAll || (e.ev != null ? e.ev > 0.005 : Math.abs(e.gap) >= 0.08)).sort((a, b) => pSort === "edge" ? ((b.fair != null ? b.pWin - b.fair : -1) - (a.fair != null ? a.pWin - a.fair : -1)) : pSort === "ret" ? ((b.ev == null ? -9 : b.ev) - (a.ev == null ? -9 : a.ev)) : pSort === "name" ? a.p.n.localeCompare(b.p.n) : (gameKick[a.game] || 0) - (gameKick[b.game] || 0)).slice(0, 80);
+  const listed = priced.filter((e) => mk === "ALL" || e.mk === mk).filter((e) => !mineOnly || e.own === ME).filter((e) => showAll || (e.ev != null ? e.ev > 0.005 : Math.abs(e.gap) >= 0.08)).sort((a, b) => pSort === "edge" ? (((b.fair != null ? b.pWin - b.fair : -1) - (a.fair != null ? a.pWin - a.fair : -1)) || ((b.ev == null ? -9 : b.ev) - (a.ev == null ? -9 : a.ev))) : pSort === "ret" ? ((b.ev == null ? -9 : b.ev) - (a.ev == null ? -9 : a.ev)) : pSort === "name" ? a.p.n.localeCompare(b.p.n) : (gameKick[a.game] || 0) - (gameKick[b.game] || 0)).slice(0, 80);
   const mineTeams = new Set(roster.map((p) => p.t));
   const bestLineEv = (g) => { if (!g.bk) return -1; const mu = g.spreadHome != null ? -g.spreadHome : 0; let best = -1; Object.keys(g.bk).filter((b) => BOOKS[b]).forEach((b) => { const r = g.bk[b]; if (r.sh != null && r.shP != null) { const h = pSpread(mu, r.sh); best = Math.max(best, h.win * ((1 - r.shP) / r.shP) - h.lose); } if (r.sh != null && r.saP != null) { const a = pSpreadAway(mu, -r.sh); best = Math.max(best, a.win * ((1 - r.saP) / r.saP) - a.lose); } if (r.tot != null && g.total != null && r.oP != null) { const t = pTotal(g.total, r.tot); best = Math.max(best, t.over * ((1 - r.oP) / r.oP) - t.under, t.under * ((1 - r.uP) / r.uP) - t.over); } }); return best; };
   const gapOf = (g) => { const mh = TEAM_MODEL_PTS[g.home], ma = TEAM_MODEL_PTS[g.away]; return mh != null && ma != null && g.total != null ? Math.abs(mh + ma - g.total) : -1; };
@@ -2204,7 +2264,7 @@ function EdgeView({ week, vegas, vegasBusy, vegasErr, onVegas, apiBase, owner, o
       <section className="card"><div className="ch"><h2 className="cond">All plays</h2><span className="aux">{fresh ? <><span className="muted">{listed.length} shown</span> <button className="lnk" onClick={() => setPlaysOpen((v) => !v)}>{playsOpen ? "collapse" : "expand"}</button></> : ""}</span></div>
         {!fresh && <div className="empty">Pull the lines with props first.</div>}
         {fresh && playsOpen && <div className="cb" style={{ paddingTop: 2, paddingBottom: 6 }}><div className="chips">{["ALL", "Pass yds", "Pass TD", "Rush yds", "Rec", "Rec yds", "Anytime TD"].map((x) => <button key={x} className={"chip" + (mk === x ? " on" : "")} onClick={() => setMk(x)}>{x === "ALL" ? "All" : x}</button>)}<button className={"chip hl" + (mineOnly ? " on" : "")} onClick={() => setMineOnly((v) => !v)}>My players</button><button className={"chip" + (showAll ? " on" : "")} onClick={() => setShowAll((v) => !v)}>{showAll ? "Everything" : "With an edge"}</button></div>
-          <div className="chips" style={{ marginTop: 6 }}>{[["edge", "Biggest edge"], ["ret", "Best return"], ["kick", "Kickoff"], ["name", "Player"]].map(([k, l]) => <button key={k} className={"chip" + (pSort === k ? " on" : "")} onClick={() => setPSort(k)}>{l}</button>)}</div></div>}
+          <div className="sortrow"><span className="lab">Sort</span>{[["edge", "Biggest edge"], ["ret", "Best return"], ["kick", "Kickoff"], ["name", "Player"]].map(([k, l]) => <button key={k} className={"chip" + (pSort === k ? " on" : "")} onClick={() => setPSort(k)}>{l}</button>)}</div></div>}
         {fresh && playsOpen && listed.length === 0 && <div className="empty">Nothing clears the bar with these filters.</div>}
         {fresh && playsOpen && listed.map((e, i) => { const t = tierOf(e); const ep = edgePts(e); const ol = openLine(week, e.key, e.field); const moved = ol != null && e.field !== "atd" && Math.abs(ol - e.line) >= 0.5; return (
           <div key={e.key + e.mk} className="prow acts in" style={{ animationDelay: `${Math.min(i, 12) * 25}ms` }}>
