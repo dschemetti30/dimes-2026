@@ -2,6 +2,20 @@
   "buildCommand": "npm run build",
   "outputDirectory": "public",
   "framework": null,
-  "functions": { "api/*.js": { "maxDuration": 30 } },
-  "headers": [ { "source": "/api/(.*)", "headers": [ { "key": "Access-Control-Allow-Origin", "value": "*" } ] } ]
+  "functions": {
+    "api/*.js": {
+      "maxDuration": 60
+    }
+  },
+  "headers": [
+    {
+      "source": "/api/(.*)",
+      "headers": [
+        {
+          "key": "Access-Control-Allow-Origin",
+          "value": "*"
+        }
+      ]
+    }
+  ]
 }
