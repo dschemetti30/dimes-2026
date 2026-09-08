@@ -20,7 +20,7 @@ module.exports = async (req, res) => {
   try {
     const r = await fetch(SLEEPER); if (r.ok) { const all = await r.json(); const byId = {};
       Object.keys(all).forEach((id) => { const p = all[id]; if (!p || !POS.has(p.position) || !p.team) return; byId[id] = p; const k = norm(p.full_name || `${p.first_name} ${p.last_name}`) + "|" + p.position;
-        out.health[k] = { team: TM[p.team] || p.team, inj: p.injury_status || null, part: p.injury_body_part || null, note: p.injury_notes || null, prac: p.practice_participation || null, dc: p.depth_chart_position || null, dco: p.depth_chart_order || null, st: p.status || null, sid: id, espn: p.espn_id || null, rank: p.search_rank || null }; });
+        out.health[k] = { team: TM[p.team] || p.team, inj: p.injury_status || null, part: p.injury_body_part || null, note: p.injury_notes || null, prac: p.practice_participation || null, dc: p.depth_chart_position || null, dco: p.depth_chart_order || null, st: p.status || null, sid: id, espn: p.espn_id || null, rank: p.search_rank || null, since: p.injury_start_date || null, nu: p.news_updated || null, num: p.number || null }; });
       out.sources.push("Sleeper players");
       for (const kind of ["add", "drop"]) { try { const t = await fetch(TREND(kind)); if (t.ok) { const arr = await t.json(); arr.forEach((x) => { const p = byId[x.player_id]; if (p) out.trend[kind][norm(p.full_name || `${p.first_name} ${p.last_name}`) + "|" + p.position] = x.count; }); out.sources.push(`Sleeper trending ${kind}s`); } } catch (e) { /* skip */ } }
     }
