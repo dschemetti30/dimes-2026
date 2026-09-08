@@ -2081,15 +2081,16 @@ function CoachView({ state, week, lineup, byId, bench, irList, rec, opp, oppName
     const userMsg = { role: "user", content: t }; const history = [...chat.filter((m) => !m.err), userMsg].slice(-12);
     setChat((c) => [...c, { ...userMsg, at: Date.now() }]); setBusy(true);
     try {
-      const res = await fetch(WEB ? "/api/coach" : "https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, system: SYSTEM + "\n\n" + buildContext({ state, week, lineup, byId, bench, irList, rec, opp, oppName, power, freeAgents, question: t, standings, sim }), messages: history.map((m) => ({ role: m.role, content: m.content })), tools: [{ type: "web_search_20250305", name: "web_search" }] }) });
-      const data = await res.json(); if (data.error) throw new Error(data.error.message || "API error");
+      const res = await fetch(WEB ? "/api/coach" : "https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 1000, system: SYSTEM + "\n\n" + buildContext({ state, week, lineup, byId, bench, irList, rec, opp, oppName, power, freeAgents, question: t, standings, sim }), messages: history.map((m) => ({ role: m.role, content: m.content })), tools: [{ type: "web_search_20250305", name: "web_search", max_uses: 3 }] }) });
+      const raw = await res.text(); let data; try { data = JSON.parse(raw); } catch (e) { throw new Error(res.status >= 500 ? "the server timed out or failed before answering. Try once more; if it keeps happening the question needs fewer web searches." : raw.slice(0, 160)); }
+      if (data.error) throw new Error(typeof data.error === "string" ? data.error : data.error.message || "API error");
       const blocks = data.content || [];
       const txt = blocks.filter((b) => b.type === "text").map((b) => b.text).join("\n").trim();
       const seen = new Set(); const sources = [];
       blocks.forEach((b) => { if (b.type === "web_search_tool_result" && Array.isArray(b.content)) b.content.forEach((r) => { if (r.url && !seen.has(r.url) && sources.length < 5) { seen.add(r.url); sources.push({ url: r.url, title: r.title || r.url }); } }); });
       const searches = blocks.filter((b) => b.type === "server_tool_use").length;
       setChat((c) => [...c, { role: "assistant", content: txt || "I came back empty. Ask again with a little more detail.", sources, searches, at: Date.now() }]);
-    } catch (e) { setChat((c) => [...c, { role: "assistant", content: `Could not reach the coach: ${e.message}. Try again in a moment.`, err: true, at: Date.now() }]); } finally { setBusy(false); }
+    } catch (e) { setChat((c) => [...c, { role: "assistant", content: `Coach hit a snag: ${e.message}`, err: true, at: Date.now() }]); } finally { setBusy(false); }
   };
   const tm = (at) => (at ? new Date(at).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : "");
   return (
