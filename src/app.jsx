@@ -21,7 +21,7 @@ const DEFS = {"HOU":{"passG":195,"rush":98,"pts":18.9,"sack":3.18,"take":1.65,"v
 const LOGO = "data:image/png;base64,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";
 const POOL_BY_ID = Object.fromEntries(POOL.map((p) => [p.id, p]));
 const WEB = typeof window !== "undefined" && !!window.__DIMES_WEB__;
-const DEFAULT_API = "https://dimes-war-room.vercel.app";
+const DEFAULT_API = "https://dimes-hq.com";
 function getStore() {
   if (typeof window === "undefined") return null;
   if (window.storage) return window.storage;
@@ -224,6 +224,8 @@ function freshState() {
   const base = { v: 3, roster: TEAMS_INIT[ME].r.map((id) => ({ ...POOL_BY_ID[id], status: "ok", note: "", via: "Draft" })), teams, lineups: {}, results: {}, watch: [], log: [{ t: "Sep 5", text: "Drafted 16 players from the 9 seat." }], notes: "", chat: [], settings: { theme: "auto", rosterLimit: 17, playoffTeams: 6, bankroll: 500, books: ["FD", "MGM"], modelW: 0.35 }, txSeen: [], scores: {}, bets: [], slip: [], checklist: {} };
   return applyTransactions(base);
 }
+const SYNC_KEYS = ["roster", "teams", "lineups", "scores", "watch", "log", "notes", "chat", "bets", "slip", "checklist", "txSeen", "vegasHist", "settings"];
+const pickSync = (s) => { const o = {}; SYNC_KEYS.forEach((k) => { if (s[k] !== undefined) o[k] = s[k]; }); if (o.settings) { o.settings = { ...o.settings }; delete o.settings.pin; } return o; };
 function migrate(s) {
   const fresh = freshState();
   let out = { ...fresh, ...s, settings: { ...fresh.settings, ...(s.settings || {}) } };
@@ -1196,7 +1198,7 @@ export default function App() {
     return () => clearTimeout(t);
   }, [state]);
 
-  const update = useCallback((fn) => setState((s) => fn({ ...s })), []);
+  const update = useCallback((fn) => setState((s) => { const n = fn({ ...s }); if (n === s) return s; const changed = SYNC_KEYS.some((k) => n[k] !== s[k]); return changed ? { ...n, updatedAt: Date.now() } : n; }), []);
   const addLog = (s, text) => ({ ...s, log: [{ t: today(), text }, ...s.log].slice(0, 100) });
   const showToast = (text, undoable) => { if (toastTimer.current) clearTimeout(toastTimer.current); setToast({ text, undoable }); toastTimer.current = setTimeout(() => setToast(null), 6000); };
   const undoable = (fn, text) => { undoRef.current = state; update(fn); showToast(text, true); };
@@ -1212,6 +1214,24 @@ export default function App() {
     const st = state.nfl; if (!st || st.week !== week || Date.now() - st.at > 10 * 60e3) pull();
     const id = setInterval(pull, 10 * 60e3); return () => clearInterval(id);
   }, [week, loaded.current, !!state]);
+  // Cross-device sync: pull on load and on focus, push (debounced) after changes. Last write wins by updatedAt.
+  const [syncMsg, setSyncMsg] = useState(""); const syncBusy = useRef(false); const lastPushed = useRef(0);
+  const pin = settings.pin || "";
+  const pullRemote = useCallback(async (force) => {
+    if (!pin || syncBusy.current) return; const base = WEB ? "" : (settings.apiBase || DEFAULT_API).replace(/\/$/, ""); syncBusy.current = true;
+    try { const r = await fetch(`${base}/api/state`, { headers: { "x-dimes-pin": pin, Accept: "application/json" } }); const j = await r.json();
+      if (!r.ok) { setSyncMsg(j.error || `sync error ${r.status}`); return; }
+      if (j.empty) { setSyncMsg("Nothing saved online yet"); return; }
+      setState((s) => { if (!force && (s.updatedAt || 0) >= j.updatedAt) return s; lastPushed.current = j.updatedAt; setSyncMsg(`Pulled ${new Date(j.updatedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}${j.device ? ` from ${j.device}` : ""}`); return migrate({ ...s, ...j.data, settings: { ...(j.data.settings || {}), pin: s.settings.pin, apiBase: s.settings.apiBase }, updatedAt: j.updatedAt }); });
+    } catch (e) { setSyncMsg("Sync offline"); } finally { syncBusy.current = false; }
+  }, [pin, settings.apiBase]);
+  useEffect(() => { if (loaded.current && pin) pullRemote(false); const f = () => { if (document.visibilityState === "visible") pullRemote(false); }; document.addEventListener("visibilitychange", f); return () => document.removeEventListener("visibilitychange", f); }, [pin, loaded.current, pullRemote]);
+  useEffect(() => {
+    if (!state || !loaded.current || !pin || !state.updatedAt || state.updatedAt <= lastPushed.current) return;
+    const base = WEB ? "" : (settings.apiBase || DEFAULT_API).replace(/\/$/, "");
+    const t = setTimeout(async () => { try { const body = { updatedAt: state.updatedAt, device: typeof navigator !== "undefined" && /Mobi|iPhone|Android/i.test(navigator.userAgent) ? "phone" : "desktop", data: pickSync(state) }; const r = await fetch(`${base}/api/state`, { method: "POST", headers: { "Content-Type": "application/json", "x-dimes-pin": pin }, body: JSON.stringify(body) }); const j = await r.json(); if (r.status === 409 && j.remote) { setSyncMsg("Newer save found online, pulled it"); setState((s) => migrate({ ...s, ...j.remote.data, settings: { ...(j.remote.data.settings || {}), pin: s.settings.pin, apiBase: s.settings.apiBase }, updatedAt: j.remote.updatedAt })); lastPushed.current = j.remote.updatedAt; return; } if (!r.ok) { setSyncMsg(j.error || `sync error ${r.status}`); return; } lastPushed.current = state.updatedAt; setSyncMsg(`Synced ${new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`); } catch (e) { setSyncMsg("Sync offline, saved on this device"); } }, 2000);
+    return () => clearTimeout(t);
+  }, [state && state.updatedAt, pin]);
   // Daily health sync: official injury reports + roster status, at most every 6 hours
   useEffect(() => {
     if (!state || !loaded.current) return; const h = state.health; if (h && h.at && Date.now() - h.at < 6 * 3600e3) return;
@@ -1369,7 +1389,7 @@ export default function App() {
         </div>
         <div className="wkline"><span className="d"><b className="cond">WEEK {week}</b>{weekSunday(week)}</span><span className="o">{week <= REG_WEEKS && <small>vs</small>}{oppName}{week === RIVALRY_WEEK && <span className="riv">Rivalry</span>}</span></div>
       </header>
-      <div className={"save" + (saveErr ? " err" : "")}>{saveMsg}</div>
+      <div className={"save" + (saveErr ? " err" : "")}>{saveMsg}{pin ? ` · ${syncMsg || "Sync on"}` : ""}</div>
 
       <main className="pg view" key={tab}>
         {tab === "home" && <HomeView week={week} actions={actions} lineup={lineup} isSaved={isSaved} byId={byId} bench={bench} irList={irList} myTotal={myTotal} opp={opp} oppName={oppName} res={resThis} vegas={state.vegas} vegasBusy={vegasBusy} vegasErr={vegasErr} onVegas={pullVegas} apiBase={apiBase}
@@ -2444,6 +2464,7 @@ function MenuSheet({ state, settings, onSettings, onReset, onImport, onClose }) 
         </div>
         {!WEB && <div className="field"><label>Lines server</label><input value={settings.apiBase || DEFAULT_API} onChange={(e) => onSettings({ apiBase: e.target.value })} placeholder={DEFAULT_API} /><div className="small muted" style={{ marginTop: 6 }}>Your Vercel deployment. <a href={(settings.apiBase || DEFAULT_API)} target="_blank" rel="noreferrer" style={{ color: "var(--info)", fontWeight: 700 }}>Open the web version</a> if this view cannot reach it.</div></div>}
         {state.vegas && state.vegas.credits && <div className="hint" style={{ paddingTop: 0 }}>Odds API credits: {state.vegas.credits.used} used, {state.vegas.credits.remaining} remaining this month.</div>}
+        <div className="field"><label>Sync across devices</label><input type="password" inputMode="numeric" value={settings.pin || ""} onChange={(e) => onSettings({ pin: e.target.value })} placeholder="Enter your DIMES_PIN" autoComplete="off" /><div className="small muted" style={{ marginTop: 6 }}>{settings.pin ? "On. Everything you enter (rosters, moves, lineups, scores, notes, bets, settings) saves to your Vercel database and follows you to any browser that has this PIN." : "Enter the PIN you set as DIMES_PIN in Vercel. Same PIN on your phone and desktop and they share one save."}</div></div>
         <div className="field"><label>Where you bet</label><div className="chips">{[["FD", "FanDuel"], ["MGM", "BetMGM"], ["DK", "DraftKings"]].map(([k, l]) => <button key={k} className={"chip" + ((settings.books || []).includes(k) ? " on" : "")} onClick={() => { const b = settings.books || []; onSettings({ books: b.includes(k) ? b.filter((x) => x !== k) : [...b, k] }); }}>{l}</button>)}</div><div className="small muted" style={{ marginTop: 6 }}>Best prices and suggested bets only use these books. Everything still counts toward fair value.</div></div>
         <div className="field"><label>Trust in the projections: {Math.round((settings.modelW || 0.35) * 100)}%</label><input type="range" min="20" max="65" step="5" value={Math.round((settings.modelW || 0.35) * 100)} onChange={(e) => onSettings({ modelW: parseInt(e.target.value, 10) / 100 })} /><div className="small muted" style={{ marginTop: 6 }}>How much weight Fantasy Index and PFF get against the book's line when pricing a prop. The engine's backtest supports 35%. Push it up and you will see more plays and bigger edges; they will also be less reliable.</div></div>
         <div className="field"><label>Bankroll for stake sizing</label><input inputMode="decimal" value={settings.bankroll || 500} onChange={(e) => onSettings({ bankroll: parseFloat(e.target.value) || 0 })} /><div className="small muted" style={{ marginTop: 6 }}>Edge suggests quarter-Kelly stakes capped at 3% of this number.</div></div>
