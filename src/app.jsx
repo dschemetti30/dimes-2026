@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import React, { useState, useEffect, useLayoutEffect, useMemo, useRef, useCallback } from "react";
 
 // =============================================================================
 // DATA
@@ -31,7 +31,7 @@ function getStore() {
 function normName(n) { return n.normalize("NFKD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/['.]/g, "").replace(/\b(jr|sr|ii|iii|iv|v)\b/g, "").replace(/[^a-z0-9]+/g, ""); }
 let VEGAS = null; // set from state on each render
 let MY_BOOKS = ["FD", "MGM"]; let MODEL_W_LIVE = 0.35;
-let HEALTH = null; let USAGE = null; let NFLSC = null; let NEWSF = null;
+let HEALTH = null; let USAGE = null; let NFLSC = null; let NEWSF = null; let LIVE = null;
 function actualPts(p, week) { const u = usageOf(p); if (!u || !u.wk || !u.wk[week]) return null; return u.wk[week].fp; }
 function hasNews(p) { if (!p || p.p === "DEF") return false; const h = healthOf(p); if (h && h.sl && (h.sl.note || h.sl.inj)) return true; if (NEWSF && NEWSF.items) { const k = normName(p.n); return NEWSF.items.some((it) => (it.athletes || []).some((a) => normName(a) === k)); } return false; }
 function usageOf(p) { if (!USAGE || !USAGE.players || !p) return null; return USAGE.players[hkey(p)] || null; } // { at, status: {key:{st,dc}}, injuries: [...] } from /api/players (nflverse official reports)
@@ -55,6 +55,9 @@ function vegasPts(p) {
 }
 function vegasGame(team) { if (!VEGAS || !VEGAS.games) return null; return VEGAS.games.find((g) => g.home === team || g.away === team) || null; }
 function vegasFresh(week) { return !!(VEGAS && VEGAS.week === week && VEGAS.games && VEGAS.games.length); }
+function liveOf(p, week) { if (!LIVE || LIVE.week !== week || !p) return null; if (p.p === "DEF") { const d = LIVE.dst && LIVE.dst[p.t]; return d ? { pts: d.pts, live: d.live, done: d.done, line: `${d.sack} sk, ${d.int} int, ${d.fr} fr, ${d.td} td, ${d.pa} pa` } : null; } const r = LIVE.players && LIVE.players[normName(p.n)]; if (!r) { const g = LIVE.games && LIVE.games.find((x) => x.home === p.t || x.away === p.t); return g ? { pts: 0, live: g.live, done: g.done, line: g.done ? "no stats" : "no stats yet" } : null; } const parts = []; if (r.att) parts.push(`${r.py} pass yds, ${r.ptd} TD${r.int ? `, ${r.int} INT` : ""}`); if (r.car) parts.push(`${r.car} car ${r.ry} yds${r.rtd ? `, ${r.rtd} TD` : ""}`); if (r.rec || r.tgt) parts.push(`${r.rec}/${r.tgt || r.rec} rec ${r.recy} yds${r.rectd ? `, ${r.rectd} TD` : ""}`); if (r.fgm != null) parts.push(`${r.fgm} FG, ${r.xp} XP`); if (r.fl) parts.push(`${r.fl} fumble lost`); return { pts: r.pts, live: r.live, done: r.done, line: parts.join("; ") || "no stats yet" }; }
+// actual-so-far plus projection for players who have not played
+function liveTotal(L, byId, week) { let pts = 0, played = 0, proj = 0; SLOTS.forEach((s0) => { const p = L[s0.k] ? byId[L[s0.k]] : null; if (!p) return; const lv = liveOf(p, week); if (lv && (lv.live || lv.done)) { pts += lv.pts; played += lv.done ? 1 : 0; } else proj += wkPts(p, week); }); return { pts: Math.round(pts * 100) / 100, proj: Math.round(proj * 10) / 10, total: Math.round((pts + proj) * 10) / 10, played }; }
 function nflScore(home, away) { if (!NFLSC || !NFLSC.games) return null; return NFLSC.games.find((g) => g.home === home && g.away === away) || null; }
 function vegasUsed(p, week) { return vegasFresh(week) && vegasPts(p) != null; }
 let VHIST = null;
@@ -747,6 +750,11 @@ textarea.notes{min-height:120px;resize:vertical;line-height:1.5}
 .nmark .bx{position:absolute;inset:0;border-radius:11px;overflow:hidden;display:grid;place-items:center;background-image:linear-gradient(180deg,rgba(255,255,255,.22),rgba(255,255,255,.04) 48%,rgba(0,0,0,.06));box-shadow:inset 0 1px 0 rgba(255,255,255,.25)}
 .nmark .bx i{position:absolute;left:0;right:0;bottom:0;height:3px}
 .pbio .tmwrap{display:inline-flex;align-items:center;gap:6px;font-weight:700;color:var(--ink)}
+.lnmv .chips{gap:6px}
+.val .n.livepts{color:var(--go)}
+.val .l.liveon{color:var(--go);position:relative;padding-left:10px}
+.val .l.liveon::before{content:"";position:absolute;left:0;top:50%;width:6px;height:6px;border-radius:50%;background:var(--go);transform:translateY(-50%);animation:pulse 1.4s ease-in-out infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.35}}
 .syncbox{margin-top:8px;border-radius:10px;padding:9px 12px;background:var(--surface2);border-left:4px solid var(--ink3)}
 .syncbox.good{border-left-color:var(--go);background:var(--go-bg)}.syncbox.bad{border-left-color:var(--stop);background:var(--stop-bg)}
 .syncbox b{display:block;font-size:13.5px}.syncbox small{display:block;color:var(--ink2);font-size:12px;margin-top:3px}
@@ -1141,14 +1149,15 @@ function Jersey({ num, team, size }) {
 function Sheet({ title, sub, onClose, children }) {
   const [closing, setClosing] = useState(false); const timer = useRef(null);
   const close = useCallback(() => { if (REDUCE) { onClose(); return; } setClosing(true); timer.current = setTimeout(onClose, 200); }, [onClose]);
-  useEffect(() => { if (timer.current) { clearTimeout(timer.current); timer.current = null; } setClosing(false); return () => { if (timer.current) clearTimeout(timer.current); }; }, [title]);
+  const bodyRef = useRef(null);
+  useEffect(() => { if (timer.current) { clearTimeout(timer.current); timer.current = null; } setClosing(false); if (bodyRef.current) bodyRef.current.scrollTop = 0; return () => { if (timer.current) clearTimeout(timer.current); }; }, [title]);
   useEffect(() => { const f = (e) => { if (e.key === "Escape") close(); }; window.addEventListener("keydown", f); return () => window.removeEventListener("keydown", f); }, [close]);
   return (
     <div className={"sbg" + (closing ? " closing" : "")} onClick={close}>
       <div className={"sheet" + (closing ? " closing" : "")} role="dialog" aria-modal="true" onClick={(e) => e.stopPropagation()}>
         <div className="grab" />
         <div className="sh"><div style={{ minWidth: 0 }}><div className="t cond">{title}</div>{sub && <div className="s">{sub}</div>}</div><button className="x" onClick={close} aria-label="Close">✕</button></div>
-        <div className="sb">{children}</div>
+        <div className="sb" ref={bodyRef}>{children}</div>
       </div>
     </div>
   );
@@ -1167,6 +1176,8 @@ function Badge({ p, slot, empty }) {
 }
 function StatusPill({ p }) { const es = effStatus(p); if (!p || es === "ok") return null; return <span className={"pill " + es} title={p.status && p.status !== "ok" ? "set by you" : "official report"}>{STATUS[es].short}</span>; }
 function Val({ p, week, label, delta, tier }) {
+  const lv = week != null ? liveOf(p, week) : null;
+  if (lv && (lv.live || lv.done)) return <span className="val cond"><div className={"n " + (lv.live ? "livepts" : "")}>{fmt1(lv.pts)}</div><div className={"l " + (lv.live ? "liveon" : "")}>{lv.live ? "live" : "final"}</div>{tier !== false && <div className="tier"><i style={{ width: `${Math.max(4, Math.min(100, (lv.pts / 30) * 100))}%` }} /></div>}</span>;
   const v = week != null ? wkPts(p, week) : pw(p);
   if (!hasProj(p)) return <span className="val na cond"><div className="n">n/a</div>{label && <div className="l">{label}</div>}</span>;
   const pct = POS_MAX[p.p] ? Math.max(4, Math.min(100, (pw(p) / POS_MAX[p.p]) * 100)) : 0;
@@ -1243,7 +1254,7 @@ export default function App() {
     timers.push(setTimeout(() => setSplash("out"), total)); timers.push(setTimeout(() => setSplash(null), total + 500));
     return () => timers.forEach(clearTimeout);
   }, []);
-  useEffect(() => { if (typeof window !== "undefined") window.scrollTo({ top: 0, left: 0, behavior: "auto" }); }, [tab]);
+  useLayoutEffect(() => { if (typeof window === "undefined") return; try { if ("scrollRestoration" in window.history) window.history.scrollRestoration = "manual"; } catch (e) { /* ignore */ } const top = () => { window.scrollTo(0, 0); document.documentElement.scrollTop = 0; document.body.scrollTop = 0; }; top(); const raf = typeof window.requestAnimationFrame === "function" ? window.requestAnimationFrame.bind(window) : (f) => setTimeout(f, 16); raf(top); setTimeout(top, 60); }, [tab]);
 
   const [sysDark, setSysDark] = useState(() => typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
   const loaded = useRef(false); const undoRef = useRef(null); const toastTimer = useRef(null); const stripRef = useRef(null);
@@ -1267,13 +1278,14 @@ export default function App() {
 
   // ---- derived ---------------------------------------------------------------
   const settings = state ? state.settings : { theme: "auto", rosterLimit: 17 };
-  VEGAS = state ? state.vegas || null : null; HEALTH = state ? state.health || null : null; USAGE = state ? state.usage || null : null; NFLSC = state ? state.nfl || null : null; NEWSF = state ? state.news || null : null; VHIST = state ? state.vegasHist || null : null; WUSER = state ? state.weeklyUser || null : null; MY_BOOKS = settings.books || ["FD", "MGM"]; MODEL_W_LIVE = settings.modelW || 0.35;
+  VEGAS = state ? state.vegas || null : null; HEALTH = state ? state.health || null : null; USAGE = state ? state.usage || null : null; NFLSC = state ? state.nfl || null : null; LIVE = state ? state.live || null : null; NEWSF = state ? state.news || null : null; VHIST = state ? state.vegasHist || null : null; WUSER = state ? state.weeklyUser || null : null; MY_BOOKS = settings.books || ["FD", "MGM"]; MODEL_W_LIVE = settings.modelW || 0.35;
   const [vegasBusy, setVegasBusy] = useState(false); const [vegasErr, setVegasErr] = useState("");
   useEffect(() => {
     if (!state || !loaded.current) return; const base = WEB ? "" : (settings.apiBase || DEFAULT_API).replace(/\/$/, "");
-    const pull = async () => { try { const r = await fetch(`${base}/api/scores?week=${week}`, { headers: { Accept: "application/json" } }); if (!r.ok) return; const j = await r.json(); if (j.error) return; update((s) => ({ ...s, nfl: { at: j.at || Date.now(), week, games: j.games || [] } })); } catch (e) { /* skip */ } };
+    const pull = async () => { try { const r = await fetch(`${base}/api/scores?week=${week}`, { headers: { Accept: "application/json" } }); if (!r.ok) return; const j = await r.json(); if (j.error) return; setState((s) => (s ? { ...s, nfl: { at: j.at || Date.now(), week, games: j.games || [] } } : s)); const anyLive = (j.games || []).some((g) => g.state === "in" || g.done); if (anyLive) { const lr = await fetch(`${base}/api/live?week=${week}`, { headers: { Accept: "application/json" } }); if (lr.ok) { const lj = await lr.json(); if (!lj.error) setState((s) => (s ? { ...s, live: { at: lj.at || Date.now(), week, games: lj.games || [], players: lj.players || {}, dst: lj.dst || {} } } : s)); } } } catch (e) { /* skip */ } };
     const st = state.nfl; if (!st || st.week !== week || Date.now() - st.at > 10 * 60e3) pull();
-    const id = setInterval(pull, 10 * 60e3); return () => clearInterval(id);
+    const anyLiveNow = state.nfl && state.nfl.week === week && (state.nfl.games || []).some((g) => g.state === "in");
+    const id = setInterval(pull, anyLiveNow ? 60e3 : 10 * 60e3); return () => clearInterval(id);
   }, [week, loaded.current, !!state]);
   // Cross-device sync: pull on load and on focus, push (debounced) after changes. Last write wins by updatedAt.
   const [syncMsg, setSyncMsg] = useState(""); const [syncOk, setSyncOk] = useState(null); const syncBusy = useRef(false); const lastPushed = useRef(0); const stateRef = useRef(null); stateRef.current = state;
@@ -1319,12 +1331,13 @@ export default function App() {
   const savedL = state ? sanitizeLineup(state.lineups[week], byId) : null;
   const autoL = useMemo(() => bestLineup(active, week), [active, week]);
   const lineup = savedL || autoL; const isSaved = !!savedL;
-  const myTotal = lineupTotal(lineup, byId, week), autoTotal = lineupTotal(autoL, byId, week);
+  const myLive = LIVE && LIVE.week === week ? liveTotal(lineup, byId, week) : null;
+  const myTotal = myLive ? myLive.total : lineupTotal(lineup, byId, week), autoTotal = lineupTotal(autoL, byId, week);
   const starterIds = new Set(Object.values(lineup).filter(Boolean));
   const bench = active.filter((p) => !starterIds.has(p.id));
   const oppName = MY_SCHEDULE[week] || "";
   const oppIds = state && state.teams[oppName] ? state.teams[oppName] : null;
-  const opp = useMemo(() => { if (!oppIds) return null; const players = oppIds.map((id) => POOL_BY_ID[id]).filter(Boolean); const b = Object.fromEntries(players.map((p) => [p.id, p])); const L = bestLineup(players, week); return { players, byId: b, L, total: lineupTotal(L, b, week), onBye: players.filter((p) => matchup(p.t, week).bye) }; }, [oppIds, week]);
+  const opp = useMemo(() => { if (!oppIds) return null; const players = oppIds.map((id) => POOL_BY_ID[id]).filter(Boolean); const b = Object.fromEntries(players.map((p) => [p.id, p])); const L = bestLineup(players, week); const lv = LIVE && LIVE.week === week ? liveTotal(L, b, week) : null; return { players, byId: b, L, total: lv ? lv.total : lineupTotal(L, b, week), live: lv, onBye: players.filter((p) => matchup(p.t, week).bye) }; }, [oppIds, week, LIVE && LIVE.at]);
   const power = useMemo(() => { if (!state) return []; return LEAGUE_TEAMS.map((t) => { const ids = t === ME ? active.map((p) => p.id) : state.teams[t]; const s = teamStrength(ids); return { team: t, ...s }; }).sort((a, b) => b.total - a.total).map((r, i) => ({ ...r, rank: i + 1 })); }, [state, active]);
   const myRank = power.find((r) => r.team === ME);
   const sim = useMemo(() => { if (!power.length) return null; const strength = LEAGUE_TEAMS.map((t) => { const r = power.find((x) => x.team === t); return r ? r.total : 100; }); return simulatePlayoffs(standings, strength, state ? state.scores || {} : {}, settings.playoffTeams || 6, 2500); }, [power, standings, state, settings.playoffTeams]);
@@ -1377,6 +1390,11 @@ export default function App() {
   const resetAll = () => { update(() => freshState()); setSheet(null); showToast("Back to draft day, plus the logged moves."); };
   const importJSON = (txt) => { try { const s = JSON.parse(txt); if (!s.roster || !Array.isArray(s.roster)) throw new Error("bad"); update(() => migrate(s)); setSheet(null); showToast("Backup restored."); return true; } catch (e) { return false; } };
   const askCoach = (text) => { setCoachPrefill(text); setSheet(null); setTab("coach"); };
+  // Lineup moves from the player card. Starts from the current (auto or saved) lineup and saves the result.
+  const moveTo = (id, slotKey) => { const L = { ...lineup }; Object.keys(L).forEach((k) => { if (L[k] === id) L[k] = null; }); if (slotKey) L[slotKey] = id; update((s) => ({ ...s, lineups: { ...s.lineups, [week]: L } })); showToast(slotKey ? `Starting ${lastName((byId[id] || {}).n || "")} at ${(SLOTS.find((x) => x.k === slotKey) || {}).label}.` : `${lastName((byId[id] || {}).n || "")} to the bench.`); };
+  const swapInto = (id, slotKey) => { const L = { ...lineup }; const out = L[slotKey]; Object.keys(L).forEach((k) => { if (L[k] === id) L[k] = out && SLOTS.find((x) => x.k === k).elig.includes((byId[out] || {}).p) ? out : null; }); L[slotKey] = id; update((s) => ({ ...s, lineups: { ...s.lineups, [week]: L } })); showToast(`${lastName((byId[id] || {}).n || "")} in${out ? `, ${lastName((byId[out] || {}).n || "")} ${Object.values(L).includes(out) ? "moves over" : "to the bench"}` : ""}.`); };
+  const toIR = (id) => { if (irList.length >= IR_LIMIT && !irList.some((p) => p.id === id)) { showToast(`IR is full (${IR_LIMIT}).`); return; } setStatus(id, "ir"); moveTo(id, null); };
+  const fromIR = (id) => { if (active.length >= ROSTER_LIMIT) { showToast(`Roster is full (${ROSTER_LIMIT} active). Drop someone in Yahoo first.`); return; } setStatus(id, "ok"); };
   const addLeg = (leg) => update((s) => { const slip = s.slip || []; if (slip.some((l) => l.id === leg.id)) { showToast("Already on the slip."); return s; } if (slip.length >= 8) { showToast("Eight legs is the limit here."); return s; } showToast(`Added ${leg.label} to the slip.`); return { ...s, slip: [...slip, leg] }; });
   const removeLeg = (id) => update((s) => ({ ...s, slip: (s.slip || []).filter((l) => l.id !== id) }));
   const clearSlip = () => update((s) => ({ ...s, slip: [] }));
@@ -1458,12 +1476,12 @@ export default function App() {
       <div className={"save" + (saveErr ? " err" : "")}>{saveMsg}{pin ? ` · ${syncMsg || "Sync on"}` : ""}</div>
 
       <main className="pg view" key={tab}>
-        {tab === "home" && <HomeView week={week} actions={actions} lineup={lineup} isSaved={isSaved} byId={byId} bench={bench} irList={irList} myTotal={myTotal} opp={opp} oppName={oppName} res={resThis} vegas={state.vegas} vegasBusy={vegasBusy} vegasErr={vegasErr} onVegas={pullVegas} apiBase={apiBase}
+        {tab === "home" && <HomeView week={week} actions={actions} lineup={lineup} isSaved={isSaved} byId={byId} bench={bench} irList={irList} myTotal={myTotal} myLive={myLive} opp={opp} oppName={oppName} res={resThis} vegas={state.vegas} vegasBusy={vegasBusy} vegasErr={vegasErr} onVegas={pullVegas} apiBase={apiBase}
           onResult={(f, v) => setResult(week, f, v)} onSlot={(k) => setSheet({ type: "slot", slot: k })} onAuto={() => { autoFill(); showToast(`Week ${week} set to projected best.`); }} onResetAuto={resetAuto} onPlayer={openPlayer}
           onCoach={() => askCoach(`Set my best Week ${week} lineup vs ${oppName}. Check injury news first.`)} onTeam={() => oppIds && setSheet({ type: "team", team: oppName })} checklist={(state.checklist || {})[week] || {}} onCheck={(id) => update((s) => { const cl = { ...(s.checklist || {}) }; const w = { ...(cl[week] || {}) }; w[id] = !w[id]; cl[week] = w; return { ...s, checklist: cl }; })} scores={state.scores || {}} onImport={() => setSheet({ type: "import" })} onSources={() => setSheet({ type: "sources" })} />}
         {tab === "team" && <TeamView roster={roster} active={active} irList={irList} week={week} myRank={myRank} rec={rec} results={results} notes={state.notes} limit={ROSTER_LIMIT} onPlayer={openPlayer} onNotes={setNotes} owner={owner} oppName={oppName} />}
         {tab === "market" && <MarketView week={week} freeAgents={freeAgents} upgrades={upgrades} worstAt={worstAt} watch={state.watch} onWatch={toggleWatch} onAdd={(pl) => setSheet({ type: "add", pick: pl })} onPlayer={openPlayer} power={power} onTeam={(t) => setSheet({ type: "team", team: t })} log={state.log} onImport={() => setSheet({ type: "import" })} onLogOne={() => setSheet({ type: "add" })} />}
-        {tab === "league" && <LeagueView week={week} power={power} standings={standings} sim={sim} scores={state.scores || {}} owner={owner} playoffTeams={settings.playoffTeams || 6} onTeam={(t) => setSheet({ type: "team", team: t })} onPlayer={openPlayer} onScores={() => setSheet({ type: "scores" })} />}
+        {tab === "league" && <LeagueView week={week} power={power} standings={standings} sim={sim} scores={state.scores || {}} owner={owner} playoffTeams={settings.playoffTeams || 6} onTeam={(t) => setSheet({ type: "team", team: t })} onPlayer={openPlayer} onScores={() => setSheet({ type: "scores" })} myLineup={lineup} />}
         {tab === "edge" && <EdgeView week={week} vegas={state.vegas} vegasBusy={vegasBusy} vegasErr={vegasErr} onVegas={pullVegas} apiBase={apiBase} owner={owner} onPlayer={openPlayer} roster={active} oppName={oppName} oppIds={oppIds} bankroll={settings.bankroll || 500} bets={state.bets || []} onLogBet={logBet} onSettle={settleBet} onRemove={removeBet} slip={state.slip || []} onAddLeg={addLeg} onRemoveLeg={removeLeg} onClearSlip={clearSlip} />}
         {tab === "coach" && <CoachView state={state} week={week} lineup={lineup} byId={byId} bench={bench} irList={irList} rec={rec} opp={opp} oppName={oppName} power={power} freeAgents={freeAgents} prefill={coachPrefill} clearPrefill={() => setCoachPrefill("")} setChat={setChat} standings={standings} sim={sim} />}
       </main>
@@ -1480,7 +1498,7 @@ export default function App() {
 
       {sheet && sheet.type === "slot" && <SlotSheet slotKey={sheet.slot} lineup={lineup} roster={active} week={week} byId={byId} onPick={(id) => { setSlot(sheet.slot, id); setSheet(null); }} onClose={() => setSheet(null)} />}
       {sheet && sheet.type === "compare" && <CompareSheet lineup={lineup} autoL={autoL} byId={byId} week={week} myTotal={myTotal} autoTotal={autoTotal} onApply={() => { autoFill(); setSheet(null); showToast("Lineup updated."); }} onClose={() => setSheet(null)} />}
-      {sheet && sheet.type === "player" && <PlayerSheet id={sheet.id} p={byId[sheet.id] || POOL_BY_ID[sheet.id]} mine={!!byId[sheet.id]} ownerName={owner[sheet.id]} week={week} irCount={irList.length} watched={state.watch.some((w) => w.id === sheet.id)}
+      {sheet && sheet.type === "player" && <PlayerSheet id={sheet.id} p={byId[sheet.id] || POOL_BY_ID[sheet.id]} mine={!!byId[sheet.id]} ownerName={owner[sheet.id]} week={week} irCount={irList.length} watched={state.watch.some((w) => w.id === sheet.id)} lineup={lineup} byId={byId} onMove={moveTo} onSwap={swapInto} onIR={toIR} onFromIR={fromIR}
         onStatus={(st) => setStatus(sheet.id, st)} onNote={(n) => setNote(sheet.id, n)} onDrop={() => { dropPlayer(sheet.id); setSheet(null); }} onAdd={() => setSheet({ type: "add", pick: POOL_BY_ID[sheet.id] })} onWatch={() => toggleWatch(POOL_BY_ID[sheet.id])}
         onTrade={() => setSheet({ type: "trade", team: owner[sheet.id], want: sheet.id })} onAsk={askCoach} onClose={() => setSheet(null)} />}
       {sheet && sheet.type === "add" && <AddSheet pick={sheet.pick} active={active} week={week} owner={owner} limit={ROSTER_LIMIT} onAdd={(pl, dropId) => { addPlayer(pl, dropId); setSheet(null); }} onClose={() => setSheet(null)} />}
@@ -1555,7 +1573,7 @@ function Checklist({ week, done, onToggle, ctx, onImport, onSources }) {
     </section>
   );
 }
-function HomeView({ week, actions, lineup, isSaved, byId, bench, irList, myTotal, opp, oppName, res, onResult, onSlot, onAuto, onResetAuto, onPlayer, onCoach, onTeam, vegas, vegasBusy, vegasErr, onVegas, apiBase, checklist, onCheck, scores, onImport, onSources }) {
+function HomeView({ week, actions, lineup, isSaved, byId, bench, irList, myTotal, myLive, opp, oppName, res, onResult, onSlot, onAuto, onResetAuto, onPlayer, onCoach, onTeam, vegas, vegasBusy, vegasErr, onVegas, apiBase, checklist, onCheck, scores, onImport, onSources }) {
   const [showOpp, setShowOpp] = useState(false);
   const myT = useTween(myTotal), opT = useTween(opp ? opp.total : 0);
   const my = parseFloat(res.my), op = parseFloat(res.opp); const done = !isNaN(my) && !isNaN(op);
@@ -1570,11 +1588,11 @@ function HomeView({ week, actions, lineup, isSaved, byId, bench, irList, myTotal
       </section>
 
       <section className="board">
-        <div className="kick"><span><b>Week {week}</b> projected</span><span>{weekSunday(week)}</span></div>
-        <div className="side"><div><div className="who cond">Dimes</div><div className="sub">{isSaved ? "Your lineup" : "Auto lineup"}</div></div><div className="tot cond">{fmt1(myT)}</div></div>
+        <div className="kick"><span><b>Week {week}</b> {myLive ? "live" : "projected"}</span><span>{weekSunday(week)}</span></div>
+        <div className="side"><div><div className="who cond">Dimes</div><div className="sub">{myLive ? `${fmt1(myLive.pts)} scored, ${fmt1(myLive.proj)} projected to come` : isSaved ? "Your lineup" : "Auto lineup"}</div></div><div className="tot cond">{fmt1(myT)}</div></div>
         {opp ? (<>
           <div className="bars"><i className="m" style={{ width: `${(myTotal / tot) * 100}%` }} /><i className="t" style={{ width: `${(opp.total / tot) * 100}%` }} /></div>
-          <div className="side"><div style={{ display: "flex", gap: 10, alignItems: "center", minWidth: 0 }}><TeamMark team={oppName} size={36} /><div style={{ minWidth: 0 }}><div className="who cond">{oppName}</div><div className="sub">Their best lineup{opp.onBye.length ? `, ${opp.onBye.length} on bye` : ""}</div></div></div><div className="tot cond">{fmt1(opT)}</div></div>
+          <div className="side"><div style={{ display: "flex", gap: 10, alignItems: "center", minWidth: 0 }}><TeamMark team={oppName} size={36} /><div style={{ minWidth: 0 }}><div className="who cond">{oppName}</div><div className="sub">{opp.live ? `${fmt1(opp.live.pts)} scored, ${fmt1(opp.live.proj)} to come` : `Their best lineup${opp.onBye.length ? `, ${opp.onBye.length} on bye` : ""}`}</div></div></div><div className="tot cond">{fmt1(opT)}</div></div>
           <div className="edge">{Math.abs(edge) < 3 ? <span>Coin flip on paper, <b>{fmt1(Math.abs(edge))}</b> apart.</span> : edge > 0 ? <span>You project ahead by <b>{fmt1(edge)}</b>.</span> : <span>They project ahead by <b>{fmt1(-edge)}</b>.</span>}{opp.onBye.length >= 3 && <span> Their bye week is your opening.</span>}</div>
           <div className="btns"><button className="btn sm" onClick={() => setShowOpp((v) => !v)}>{showOpp ? "Hide their lineup" : "Their lineup"}</button><button className="btn sm" onClick={onTeam}>Scout {oppName}</button></div>
           {showOpp && SLOTS.map((s) => { const p = opp.L[s.k] ? opp.byId[opp.L[s.k]] : null; return p ? <PRow key={s.k} p={p} week={week} badge={<Badge slot={s.label} p={p} />} onClick={() => onPlayer(p.id)} right={<Val p={p} week={week} />} /> : <div key={s.k} className="prow dim"><Badge slot={s.label} empty /><span className="pname">Nobody available</span><span /></div>; })}
@@ -1638,7 +1656,7 @@ function CompareSheet({ lineup, autoL, byId, week, myTotal, autoTotal, onApply, 
 // =============================================================================
 // PLAYER SHEET (mine, free agent, or someone else's)
 // =============================================================================
-function PlayerSheet({ p, mine, ownerName, week, irCount, watched, onStatus, onNote, onDrop, onAdd, onWatch, onTrade, onAsk, onClose }) {
+function PlayerSheet({ p, mine, ownerName, week, irCount, watched, onStatus, onNote, onDrop, onAdd, onWatch, onTrade, onAsk, onClose, lineup, byId, onMove, onSwap, onIR, onFromIR }) {
   if (!p) return null;
   const next = [week, week + 1, week + 2].filter((w) => w <= 18);
   const news = newsFor(p); const flags = (p.fl || "").split("").filter((f) => FLAG_TEXT[f]);
@@ -1648,7 +1666,7 @@ function PlayerSheet({ p, mine, ownerName, week, irCount, watched, onStatus, onN
       {(() => { const b = p.bio; const h = healthOf(p); const es = effStatus(p); const bd = wkBreakdown(p, week); const m = matchup(p.t, week); const seasonSrc = [p.pwF != null && `Fantasy Index ${fmt1(p.pwF)}`, p.pwB != null && `Footballguys ${fmt1(p.pwB)}`, p.pwP != null && `PFF ${fmt1(p.pwP)}`].filter(Boolean); return (
         <div className="phero">
           <div className="pht">{b && b.hs ? <img className="hsh" src={b.hs} alt="" onError={(e) => { e.target.style.display = "none"; }} /> : null}{b && b.num ? <Jersey num={b.num} team={p.t} size={46} /> : <Badge p={p} />}
-            <div className="phn"><div className="pbig cond">{bd.parts.length ? fmt1(bd.v) : hasProj(p) ? fmt1(pw(p)) : "n/a"}</div><div className="lab">{bd.parts.length ? `This week, ${m.bye ? "bye" : m.text}` : "Per week, rest of season"}</div></div>
+            {(() => { const lv = liveOf(p, week); if (lv && (lv.live || lv.done)) return <div className="phn"><div className="pbig cond">{fmt1(lv.pts)}</div><div className="lab">{lv.live ? "Live" : "Final"}, {m.bye ? "bye" : m.text}. {lv.line}</div></div>; return <div className="phn"><div className="pbig cond">{bd.parts.length ? fmt1(bd.v) : hasProj(p) ? fmt1(pw(p)) : "n/a"}</div><div className="lab">{bd.parts.length ? `This week, ${m.bye ? "bye" : m.text}` : "Per week, rest of season"}</div></div>; })()}
             {hasProj(p) && bd.parts.length > 0 && <div className="phn r"><div className="pmid cond">{fmt1(pw(p))}</div><div className="lab">Per week, rest of season</div></div>}
           </div>
           {b && <div className="pbio"><span className="tmwrap"><NflMark team={p.t} size={20} />{TEAM_NAMES[p.t] || p.t}</span>{b.num && <span>#{b.num}</span>}{b.h && <span>{b.h}</span>}{b.w && <span>{b.w} lb</span>}{b.age != null && <span>{b.age} yrs</span>}{b.exp != null && <span>{b.exp === 0 ? "rookie" : `${b.exp} yr${b.exp > 1 ? "s" : ""} pro`}</span>}{b.col && <span>{b.col}</span>}{b.dc && <span>depth {b.dc}{h && h.sl && h.sl.dco ? h.sl.dco : ""}</span>}</div>}
@@ -1668,6 +1686,17 @@ function PlayerSheet({ p, mine, ownerName, week, irCount, watched, onStatus, onN
       {p.s25 && <div className="s25"><div className="ssec" style={{ padding: "6px 0 4px" }}><span>2025 season{p.s25.team25 && p.s25.team25 !== p.t ? ` (${p.s25.team25})` : ""}</span><span>{p.s25.g} games, {p.s25.ppg} pts/game</span></div><div className="s25g">{(p.p === "QB" ? [["Pass yds", p.s25.py], ["Pass TD", p.s25.ptd], ["INT", p.s25.int], ["Rush yds", p.s25.ry], ["Rush TD", p.s25.rtd]] : p.p === "RB" ? [["Carries", p.s25.car], ["Rush yds", p.s25.ry], ["Rush TD", p.s25.rtd], ["Targets", p.s25.tgt], ["Rec yds", p.s25.recy], ["Rec TD", p.s25.rectd]] : [["Targets", p.s25.tgt], ["Rec", p.s25.rec], ["Rec yds", p.s25.recy], ["Rec TD", p.s25.rectd], ["Tgt share", p.s25.ts != null ? p.s25.ts + "%" : "–"]]).map(([k, v]) => <span key={k}><b className="cond">{v}</b><small>{k}</small></span>)}</div></div>}
 
 
+      {mine && lineup && (() => { const inSlot = Object.keys(lineup).find((k) => lineup[k] === p.id); const onIRnow = p.status === "ir"; const elig = SLOTS.filter((s0) => s0.elig.includes(p.p)); const bye = matchup(p.t, week).bye; return (
+        <div className="field"><label>Lineup, week {week}</label>
+          <div className="lnmv">
+            {onIRnow ? <div className="hint" style={{ padding: "0 0 8px" }}>On IR. Activate to use him.</div> : inSlot ? <div className="hint" style={{ padding: "0 0 8px" }}>Starting at <b>{(SLOTS.find((x) => x.k === inSlot) || {}).label}</b>.</div> : <div className="hint" style={{ padding: "0 0 8px" }}>On the bench{bye ? ", and on bye this week" : ""}.</div>}
+            <div className="chips">
+              {!onIRnow && elig.map((s0) => { const cur = lineup[s0.k] ? byId[lineup[s0.k]] : null; if (inSlot === s0.k) return null; return <button key={s0.k} className="chip" onClick={() => (cur ? onSwap(p.id, s0.k) : onMove(p.id, s0.k))}>{cur ? `${s0.label} for ${lastName(cur.n)}` : `Start at ${s0.label}`}</button>; })}
+              {inSlot && <button className="chip" onClick={() => onMove(p.id, null)}>Bench</button>}
+              {!onIRnow ? <button className="chip" onClick={() => onIR(p.id)}>Move to IR</button> : <button className="chip on" onClick={() => onFromIR(p.id)}>Activate from IR</button>}
+            </div>
+          </div>
+        </div>); })()}
       {mine && (<div className="field"><label>Status</label><div className="seg">{["ok", "q", "d", "o", "ir"].map((k) => <button key={k} className={p.status === k ? "on" : ""} onClick={() => onStatus(k)} disabled={k === "ir" && p.status !== "ir" && irCount >= IR_LIMIT}>{k === "ok" ? "Healthy" : k === "q" ? "Q" : k === "d" ? "D" : k === "o" ? "Out" : "IR"}</button>)}</div><div className="small muted" style={{ marginTop: 6 }}>{p.status && p.status !== "ok" ? `${STATUS[p.status].label}, set by you. Tap Healthy to go back to the official report.` : `Following the official report${effStatus(p) !== "ok" ? ` (${STATUS[effStatus(p)].label})` : ""}. Tap to override.`}{irCount >= IR_LIMIT && p.status !== "ir" ? " IR is full." : ""}</div></div>)}
       <div className="field"><label>Next up</label><div className="chips">{next.map((w) => { const m = matchup(p.t, w); const r = mxRank(p, w); return <span key={w} className={"chip static" + (r != null && r >= 23 ? " soft" : r != null && r <= 10 ? " tough" : "")} style={{ color: m.bye ? "var(--stop)" : undefined }}>Wk {w} {m.text}{r != null ? <small className="rk">{ordinal(r)} {mxLabel(p)}</small> : null}</span>; })}</div></div>
       {mine && <div className="field"><label>Note</label><input value={p.note || ""} onChange={(e) => onNote(e.target.value)} placeholder="Hamstring, limited Wed. Snap share up. Trade bait." /></div>}
@@ -1775,7 +1804,7 @@ function NewsCenter({ week, roster, owner, oppName, onPlayer }) {
 }
 function TeamView({ roster, active, irList, week, myRank, rec, results, notes, limit, onPlayer, onNotes, owner, oppName }) {
   const [openNews, setOpenNews] = useState({});
-  const [sec, setSec] = useState("roster");
+  const [sec, setSecRaw] = useState("roster"); const setSec = (k) => { setSecRaw(k); if (typeof window !== "undefined") setTimeout(() => window.scrollTo(0, 0), 0); };
   const counts = {}; active.forEach((p) => { counts[p.p] = (counts[p.p] || 0) + 1; });
   const news = useMemo(() => { const seen = new Set(); const out = []; roster.forEach((p) => newsFor(p).forEach((n) => { if (!seen.has(n.x)) { seen.add(n.x); out.push({ p, n }); } })); return out; }, [roster]);
   const weeks = Array.from({ length: MAX_WEEK }, (_, i) => i + 1);
@@ -1921,7 +1950,7 @@ function tradeTargets(power) {
 // LEAGUE
 // =============================================================================
 function posStrength(r, g) { const st = SLOTS.filter((s) => s.elig.length === 1 && s.elig[0] === g).map((s) => (r.L[s.k] ? pw(r.byId[r.L[s.k]]) : 0)); return st.length ? st.reduce((a, b) => a + b, 0) / st.length : 0; }
-function LeagueView({ week, power, standings, sim, scores, owner, playoffTeams, onTeam, onPlayer, onScores }) {
+function LeagueView({ week, power, standings, sim, scores, owner, playoffTeams, onTeam, onPlayer, onScores, myLineup }) {
   const [posTab, setPosTab] = useState("RB");
   const avg = useMemo(() => { const a = {}; POS_LIST.forEach((g) => { const v = power.map((r) => posStrength(r, g)); a[g] = v.length ? v.reduce((x, y) => x + y, 0) / v.length : 0; }); return a; }, [power]);
   const mine = power.find((r) => r.team === ME);
@@ -1929,7 +1958,7 @@ function LeagueView({ week, power, standings, sim, scores, owner, playoffTeams, 
   const maxPos = {}; POS_LIST.forEach((g) => { maxPos[g] = Math.max(1, ...power.map((r) => posStrength(r, g))); });
   const played = standings.reduce((a, x) => a + x.g, 0) / 2;
   // this week's matchups with projections
-  const matchups = useMemo(() => { const done = new Set(); const out = []; if (week > REG_WEEKS) return out; LEAGUE_TEAMS.forEach((a) => { const b = LSCHED[week][a]; if (done.has(a)) return; done.add(a); done.add(b); const ra = power.find((r) => r.team === a), rb = power.find((r) => r.team === b); const pa = ra ? lineupTotal(bestLineup(ra.players, week), ra.byId, week) : 0, pb = rb ? lineupTotal(bestLineup(rb.players, week), rb.byId, week) : 0; const sa = scores[week] && scores[week][a], sb = scores[week] && scores[week][b]; out.push({ a, b, pa, pb, wp: winProb(pa, pb), sa, sb }); }); return out.sort((x, y) => (x.a === ME || x.b === ME ? -1 : y.a === ME || y.b === ME ? 1 : 0)); }, [power, week, scores]);
+  const matchups = useMemo(() => { const done = new Set(); const out = []; if (week > REG_WEEKS) return out; LEAGUE_TEAMS.forEach((a) => { const b = LSCHED[week][a]; if (done.has(a)) return; done.add(a); done.add(b); const ra = power.find((r) => r.team === a), rb = power.find((r) => r.team === b); const La = ra ? (a === ME && myLineup ? myLineup : bestLineup(ra.players, week)) : {}, Lb = rb ? (b === ME && myLineup ? myLineup : bestLineup(rb.players, week)) : {}; const lvA = ra && LIVE && LIVE.week === week ? liveTotal(La, ra.byId, week) : null, lvB = rb && LIVE && LIVE.week === week ? liveTotal(Lb, rb.byId, week) : null; const pa = lvA ? lvA.total : ra ? lineupTotal(La, ra.byId, week) : 0, pb = lvB ? lvB.total : rb ? lineupTotal(Lb, rb.byId, week) : 0; const sa = scores[week] && scores[week][a], sb = scores[week] && scores[week][b]; out.push({ a, b, pa, pb, wp: winProb(pa, pb), sa, sb, live: !!(lvA || lvB), la: lvA ? lvA.pts : null, lb: lvB ? lvB.pts : null }); }); return out.sort((x, y) => (x.a === ME || x.b === ME ? -1 : y.a === ME || y.b === ME ? 1 : 0)); }, [power, week, scores]);
   const leaders = useMemo(() => POOL.filter((p) => p.p === posTab && hasProj(p)).sort((a, b) => pw(b) - pw(a)).slice(0, 12), [posTab]);
   return (
     <div className="cols lead"><div className="col">
@@ -1965,9 +1994,14 @@ function LeagueView({ week, power, standings, sim, scores, owner, playoffTeams, 
             <div className="side"><span className={"tm" + (aWin ? " w" : "")}><TeamMark team={m.a} size={24} />{m.a}</span><span className="cond n">{fin ? m.sa : fmt1(m.pa)}</span></div>
             <div className="bar"><i style={{ width: `${Math.round(m.wp * 100)}%` }} /></div>
             <div className="side"><span className={"tm" + (!aWin ? " w" : "")}><TeamMark team={m.b} size={24} />{m.b}</span><span className="cond n">{fin ? m.sb : fmt1(m.pb)}</span></div>
-            <div className="wp">{fin ? "Final" : `${Math.round(m.wp * 100)}% ${m.a === ME ? "you" : lastWord(m.a)} / ${100 - Math.round(m.wp * 100)}% ${m.b === ME ? "you" : lastWord(m.b)}`}</div>
+            <div className="wp">{fin ? "Final" : m.live ? `Live: ${fmt1(m.la || 0)} to ${fmt1(m.lb || 0)} so far, ${Math.round(m.wp * 100)}% ${m.a === ME ? "you" : lastWord(m.a)}` : `${Math.round(m.wp * 100)}% ${m.a === ME ? "you" : lastWord(m.a)} / ${100 - Math.round(m.wp * 100)}% ${m.b === ME ? "you" : lastWord(m.b)}`}</div>
           </div>); })}
       </section>
+      {LIVE && LIVE.week === week && (() => { const rows = POOL.map((p) => ({ p, lv: liveOf(p, week) })).filter((x) => x.lv && x.lv.pts > 0).sort((a, b) => b.lv.pts - a.lv.pts).slice(0, 12); if (!rows.length) return null; return (
+        <section className="card"><div className="ch"><h2 className="cond">Week {week} leaders</h2><span className="aux">live, all NFL players</span></div>
+          {rows.map(({ p, lv }, i) => { const o = owner[p.id]; return <PRow key={p.id} p={p} week={week} onClick={() => onPlayer(p.id)} sub={lv.line} right={<><span className={"pill " + (o === ME ? "me" : o ? "own" : "up")}>{o === ME ? "Dimes" : o ? o : "FA"}</span><Val p={p} week={week} /></>} idx={i} />; })}
+          <div className="hint">Points on Yahoo half-PPR scoring from ESPN's live box scores, refreshed every minute while games are on. Kicker distances are approximated; defenses count sacks, takeaways, touchdowns and points allowed.</div>
+        </section>); })()}
       <section className="card"><div className="ch"><h2 className="cond">Where you stand</h2><span className="aux">avg starter vs league</span></div>
         <div className="stats">{needs.slice().sort((a, b) => POS_ORDER[a.pos] - POS_ORDER[b.pos]).map((n) => <div key={n.pos} className="stat"><div className={"v cond " + (n.gap >= 0 ? "up" : "dn")}>{signed(n.gap)}</div><div className="k">{n.pos}, avg {fmt1(n.avg)}</div></div>)}</div>
       </section>
