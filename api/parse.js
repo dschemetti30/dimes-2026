@@ -4,7 +4,7 @@ const PROMPTS = {
   transactions: `You read Yahoo Fantasy transaction logs. Return ONLY a JSON array. Each item: {"date":"Sep 7","team":"<fantasy team name exactly as shown>","action":"add"|"drop"|"trade","player":"<full player name>","pos":"QB|RB|WR|TE|K|DEF","nfl":"<NFL abbreviation like DET, SF, LV>","to":"<receiving fantasy team for trades, else null>"}. For defenses use the team nickname as player (e.g. "Raiders") and pos "DEF". One item per player moved. No prose.`,
   scores: `You read Yahoo Fantasy scoreboards or standings. Return ONLY a JSON array of matchups: {"week":<number or null>,"a":"<fantasy team name>","sa":<score as number or null>,"b":"<fantasy team name>","sb":<score or null>}. If the page shows a standings table instead, return {"standings":[{"team":"<name>","w":<wins>,"l":<losses>,"t":<ties>,"pf":<points for>,"pa":<points against>}]} . No prose.`,
   lineup: `You read a Yahoo Fantasy roster page. Return ONLY JSON: {"starters":[{"slot":"QB|RB|WR|TE|FLEX|K|DEF","player":"<full name as shown, expand abbreviated first names if obvious>","pos":"QB|RB|WR|TE|K|DEF","nfl":"<NFL abbr>","status":"<Q|D|O|IR|IR-R|CEL|null>"}],"bench":[same shape without slot],"ir":[same shape]}. Slot labels W/R/T or FLEX mean FLEX. No prose.`,
-  roster: `You read a Yahoo Fantasy roster page for one team. Return ONLY JSON: {"team":"<fantasy team name if visible else null>","players":[{"player":"<full name>","pos":"QB|RB|WR|TE|K|DEF","nfl":"<NFL abbr>","status":"<Q|D|O|IR|null>"}]}. Include starters, bench and IR. No prose.`,
+  roster: `You read a Yahoo Fantasy roster page for one team (there may be several screenshots covering one long page). Return ONLY JSON: {"team":"<fantasy team name if visible else null>","players":[{"slot":"QB|RB|WR|TE|FLEX|K|DEF|BN|IR","player":"<full name>","pos":"QB|RB|WR|TE|K|DEF","nfl":"<NFL abbr>","status":"<Q|D|O|IR|IR-R|CEL|null>"}]}. Slot labels W/R/T mean FLEX, BN is bench, IR is injured reserve. Skip empty slots. Include every player once. No prose.`,
 };
 module.exports = async (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*"); res.setHeader("Access-Control-Allow-Headers", "Content-Type");
@@ -15,7 +15,8 @@ module.exports = async (req, res) => {
     const body = typeof req.body === "string" ? JSON.parse(req.body) : req.body || {};
     const kind = body.kind; if (!PROMPTS[kind]) return res.status(400).json({ error: "Unknown kind" });
     const content = [];
-    if (body.image) content.push({ type: "image", source: { type: "base64", media_type: body.mediaType || "image/jpeg", data: body.image } });
+    const imgs = body.images && Array.isArray(body.images) ? body.images.slice(0, 4) : body.image ? [body.image] : [];
+    imgs.forEach((im) => content.push({ type: "image", source: { type: "base64", media_type: body.mediaType || "image/jpeg", data: im } }));
     if (body.text) content.push({ type: "text", text: "Pasted text:\n" + String(body.text).slice(0, 20000) });
     content.push({ type: "text", text: `Extract the ${kind} data now. Output JSON only.` });
     const r = await fetch("https://api.anthropic.com/v1/messages", { method: "POST", headers: { "Content-Type": "application/json", "x-api-key": key, "anthropic-version": "2023-06-01" }, body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 4000, system: PROMPTS[kind], messages: [{ role: "user", content }] }) });
