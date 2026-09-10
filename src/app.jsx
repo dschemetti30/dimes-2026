@@ -1103,6 +1103,32 @@ textarea.notes{min-height:120px;resize:vertical;line-height:1.5}
 .nav .brand,.nav .spacer,.nav .gearbtn{display:none}
 .nav button.deskonly{display:none}
 @media (min-width:900px){.nav button.deskonly{display:flex}.nav button.mobonly{display:none}}
+.rank .ch .seg.sm button{padding:5px 10px;font-size:12px}
+.rgwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;padding:0 0 4px}
+.rg{display:grid;min-width:100%;font-variant-numeric:tabular-nums}
+.rgh,.rgr{display:contents}
+.rgh>*{position:sticky;top:0;background:var(--surface2);padding:8px 6px;border-bottom:1px solid var(--rule);z-index:1;font-size:9.5px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--ink3);text-align:right;white-space:nowrap}
+.rgh>.l{text-align:left}
+.rgh .shb{padding:8px 6px;border-radius:0}
+.rgr>*{padding:6px 6px;border-bottom:1px solid var(--rule);display:flex;align-items:center;justify-content:flex-end;min-width:0;background:var(--surface)}
+.rgr>.l{justify-content:flex-start}
+.rgr.mine>*{background:var(--info-bg)}
+.rgr.byew>*{opacity:.55}
+.rgr .rk{font-size:12px;font-weight:800;color:var(--ink3);justify-content:center}
+.rgr .pl{gap:8px;text-align:left;min-width:0}
+.rgr .pl .ptxt{min-width:0}
+.rgr .pl .pname .t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:150px;display:inline-block;vertical-align:bottom}
+.rgr .own{gap:6px}
+.rgr .own .tmark{margin-right:0}
+.rgr .star{font-size:16px;color:var(--rule2);padding:0 2px}
+.rgr .star.on{color:var(--warn)}
+.rgr .c{font-size:13.5px;font-weight:700;color:var(--ink2)}
+.rgr .c.on{color:var(--ink);font-weight:800}
+.rgr .c.hi{color:var(--go)}.rgr .c.lo{color:var(--stop)}
+.rgr .c.live{color:var(--go);font-weight:800}.rgr .c.fin{color:var(--ink);font-weight:800}
+.rg .rgr:first-of-type>*{}
+.rgr>.l:first-of-type,.rgh>.l:first-of-type{position:sticky;left:36px;z-index:2}
+.rgr>.rk,.rgh>span:first-child{position:sticky;left:0;z-index:2}
 .h2h{display:grid;grid-template-columns:1fr 64px 1fr;gap:6px;align-items:center;padding:6px 10px;border-top:1px solid var(--rule)}
 .h2hp{display:flex;align-items:center;gap:8px;min-width:0;text-align:left;padding:4px 2px;border-radius:10px}
 .h2hp.r{justify-content:flex-end;text-align:right}
@@ -1300,6 +1326,7 @@ function NavIcon({ name }) {
     case "home": return <svg viewBox="0 0 24 24" {...c}><rect x="3" y="5" width="18" height="16" rx="3" /><path d="M3 10h18M8 3v4M16 3v4M8 15h3M13 15h3" /></svg>;
     case "team": return <svg viewBox="0 0 24 24" {...c}><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6" /><circle cx="17.5" cy="9" r="2.5" /><path d="M16 14.2c3 .2 5.5 2.3 5.5 5.3" /></svg>;
     case "market": return <svg viewBox="0 0 24 24" {...c}><path d="M4 8h13l-3-3M20 16H7l3 3" /></svg>;
+    case "rankings": return <svg viewBox="0 0 24 24" {...c}><path d="M4 6h16M4 12h11M4 18h7" /><path d="M18 11l3 3-3 3" /></svg>;
     case "matchup": return <svg viewBox="0 0 24 24" {...c}><path d="M4 6h6v12H4zM14 6h6v12h-6zM10 12h4" /></svg>;
     case "schedule": return <svg viewBox="0 0 24 24" {...c}><rect x="3" y="5" width="18" height="16" rx="2" /><path d="M3 10h18M8 3v4M16 3v4M8 14h3M13 14h3M8 18h3" /></svg>;
     case "more": return <svg viewBox="0 0 24 24" {...c}><circle cx="5" cy="12" r="1.6" /><circle cx="12" cy="12" r="1.6" /><circle cx="19" cy="12" r="1.6" /></svg>;
@@ -1575,6 +1602,7 @@ export default function App() {
         {tab === "team" && <TeamView roster={roster} active={active} irList={irList} week={week} myRank={myRank} rec={rec} results={results} notes={state.notes} limit={ROSTER_LIMIT} onPlayer={openPlayer} onNotes={setNotes} owner={owner} oppName={oppName} onFromIR={fromIR} />}
         {tab === "market" && <MarketView active={active} irList={irList} week={week} freeAgents={freeAgents} upgrades={upgrades} worstAt={worstAt} watch={state.watch} onWatch={toggleWatch} onAdd={(pl) => setSheet({ type: "add", pick: pl })} onPlayer={openPlayer} power={power} onTeam={(t) => setSheet({ type: "team", team: t })} log={state.log} onImport={() => setSheet({ type: "import" })} onLogOne={() => setSheet({ type: "add" })} />}
         {tab === "league" && <LeagueView week={week} power={power} standings={standings} sim={sim} scores={state.scores || {}} owner={owner} playoffTeams={settings.playoffTeams || 6} onTeam={(t) => setSheet({ type: "team", team: t })} onPlayer={openPlayer} onScores={() => setSheet({ type: "scores" })} myLineup={lineup} onBox={(a, b) => setSheet({ type: "box", a, b })} />}
+        {tab === "rankings" && <RankingsView week={week} owner={owner} watch={state.watch} onWatch={toggleWatch} onPlayer={openPlayer} />}
         {tab === "matchup" && <MatchupView week={week} lineup={lineup} byId={byId} bench={bench} opp={opp} oppName={oppName} myLive={myLive} onPlayer={openPlayer} onTeam={() => oppIds && setSheet({ type: "team", team: oppName })} onCoach={() => askCoach(`Game plan for Week ${week} vs ${oppName}: where do I win, where do I lose, and what should I change?`)} onBox={() => setSheet({ type: "box", a: ME, b: oppName })} results={results} />}
         {tab === "schedule" && <ScheduleView week={week} scores={state.scores || {}} standings={standings} sim={sim} power={power} playoffTeams={settings.playoffTeams || 6} onTeam={(t) => t !== ME && setSheet({ type: "team", team: t })} onBox={(a, b) => setSheet({ type: "box", a, b })} />}
         {tab === "edge" && <EdgeView week={week} vegas={state.vegas} vegasBusy={vegasBusy} vegasErr={vegasErr} onVegas={pullVegas} apiBase={apiBase} owner={owner} onPlayer={openPlayer} roster={active} oppName={oppName} oppIds={oppIds} bankroll={settings.bankroll || 500} bets={state.bets || []} onLogBet={logBet} onSettle={settleBet} onRemove={removeBet} slip={state.slip || []} onAddLeg={addLeg} onRemoveLeg={removeLeg} onClearSlip={clearSlip} />}
@@ -1583,9 +1611,9 @@ export default function App() {
 
       <nav className="nav" aria-label="Sections"><div className="in">
         <div className="brand"><img src={settings.logo || LOGO} alt="DIMES" /><span className="lg">Front Office</span></div>
-        {[["home", "Home"], ["matchup", "Matchup"], ["team", "Team"], ["league", "League"], ["schedule", "Schedule"], ["market", "Transactions"], ["edge", "Edge"], ["coach", "Coach"]].map(([k, l]) => (
-          <button key={k} className={(tab === k ? "on" : "") + (["league", "schedule", "market", "coach"].includes(k) ? " deskonly" : "")} onClick={() => setTab(k)} aria-current={tab === k ? "page" : undefined}>{k === "home" && todoCount > 0 && <span className="dot" />}<NavIcon name={k} />{l}</button>))}
-        <button className={"mobonly" + (["league", "schedule", "market", "coach"].includes(tab) ? " on" : "")} onClick={() => setSheet({ type: "more" })}><NavIcon name="more" />More</button>
+        {[["home", "Home"], ["matchup", "Matchup"], ["team", "Team"], ["rankings", "Rankings"], ["league", "League"], ["schedule", "Schedule"], ["market", "Transactions"], ["edge", "Edge"], ["coach", "Coach"]].map(([k, l]) => (
+          <button key={k} className={(tab === k ? "on" : "") + (["league", "schedule", "market", "coach", "team"].includes(k) ? " deskonly" : "")} onClick={() => setTab(k)} aria-current={tab === k ? "page" : undefined}>{k === "home" && todoCount > 0 && <span className="dot" />}<NavIcon name={k} />{l}</button>))}
+        <button className={"mobonly" + (["league", "schedule", "market", "coach", "team"].includes(tab) ? " on" : "")} onClick={() => setSheet({ type: "more" })}><NavIcon name="more" />More</button>
         <div className="spacer" />
         <button className="gearbtn" onClick={() => setSheet({ type: "menu" })}><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round"><path d="M4 7h16M4 12h16M4 17h16" /></svg>Settings</button>
       </div></nav>
@@ -1608,7 +1636,7 @@ export default function App() {
         onMyRoster={(players, L, irIds, adds, drops) => { undoable((s) => { const ids = players.map((p) => p.id); const strip = (id) => { Object.keys(s.teams).forEach((t) => { s.teams[t] = s.teams[t].filter((x) => x !== id); }); }; ids.forEach(strip); const keep = Object.fromEntries(s.roster.map((p) => [p.id, p])); s.roster = players.map((p) => ({ ...(POOL_BY_ID[p.id] || p), ...(keep[p.id] ? { note: keep[p.id].note, via: keep[p.id].via } : { note: "", via: "Yahoo" }), status: irIds.includes(p.id) ? "ir" : keep[p.id] && keep[p.id].status && keep[p.id].status !== "ir" ? keep[p.id].status : "ok" })); s.lineups = { ...s.lineups, [week]: Object.keys(L).length >= 8 ? L : (s.lineups[week] || null) }; s.watch = s.watch.filter((w) => !ids.includes(w.id)); let ns = { ...s }; adds.forEach((p) => { ns = addLog(ns, `Added ${p.n} (from your Yahoo roster).`); }); drops.forEach((p) => { ns = addLog(ns, `Dropped ${p.n} (from your Yahoo roster).`); }); return ns; }, `Roster synced from Yahoo: ${adds.length} added, ${drops.length} removed.`); }}
         onRoster={(team, players, L) => { undoable((s) => { if (L) s.teamLineups = { ...(s.teamLineups || {}), [week]: { ...((s.teamLineups || {})[week] || {}), [team]: L } }; const ids = players.map((p) => p.id); const strip = (id) => { s.roster = s.roster.filter((p) => p.id !== id); Object.keys(s.teams).forEach((t) => { s.teams[t] = s.teams[t].filter((x) => x !== id); }); }; ids.forEach(strip); if (team === ME) { s.roster = [...s.roster, ...players.map((p) => ({ ...(POOL_BY_ID[p.id] || p), status: "ok", note: "", via: "Yahoo" }))]; } else s.teams = { ...s.teams, [team]: ids }; return addLog({ ...s }, `${team === ME ? "Your" : team + "'s"} roster replaced from Yahoo (${ids.length} players).`); }, `${team} roster updated.`); }} />}
       {sheet && sheet.type === "sources" && <WeeklySourcesSheet week={week} existing={!!(state.weeklyUser && state.weeklyUser[week])} onSave={(out, gpo) => { update((s) => ({ ...s, weeklyUser: { ...(s.weeklyUser || {}), [week]: { ...((s.weeklyUser || {})[week] || {}), ...out } }, gpUser: gpo && Object.keys(gpo).length ? { ...(s.gpUser || {}), [week]: { ...((s.gpUser || {})[week] || {}), ...gpo } } : s.gpUser })); showToast(`Week ${week} sources saved.`); }} onClose={() => setSheet(null)} />}
-      {sheet && sheet.type === "more" && <Sheet title="More" sub="" onClose={() => setSheet(null)}><div className="morelist">{[["league", "League", "Standings, playoff odds, power rankings"], ["schedule", "Schedule", "Every week, every team, the playoff picture"], ["market", "Transactions", "Wire, trades, trends, the log"], ["coach", "Coach", "Ask anything about your team"]].map(([k, l, d]) => <button key={k} className="morerow" onClick={() => { setTab(k); setSheet(null); }}><NavIcon name={k} /><span><b>{l}</b><small>{d}</small></span><span className="chev">›</span></button>)}<button className="morerow" onClick={() => setSheet({ type: "menu" })}><NavIcon name="more" /><span><b>Settings</b><small>Sync, notifications, books, lineup lean</small></span><span className="chev">›</span></button></div></Sheet>}
+      {sheet && sheet.type === "more" && <Sheet title="More" sub="" onClose={() => setSheet(null)}><div className="morelist">{[["team", "Team", "Roster, IR, metrics, news, notes"], ["league", "League", "Standings, playoff odds, power rankings"], ["schedule", "Schedule", "Every week, every team, the playoff picture"], ["market", "Transactions", "Wire, trades, trends, the log"], ["coach", "Coach", "Ask anything about your team"]].map(([k, l, d]) => <button key={k} className="morerow" onClick={() => { setTab(k); setSheet(null); }}><NavIcon name={k} /><span><b>{l}</b><small>{d}</small></span><span className="chev">›</span></button>)}<button className="morerow" onClick={() => setSheet({ type: "menu" })}><NavIcon name="more" /><span><b>Settings</b><small>Sync, notifications, books, lineup lean</small></span><span className="chev">›</span></button></div></Sheet>}
       {sheet && sheet.type === "menu" && <MenuSheet syncState={{ msg: syncMsg, ok: syncOk }} onSyncNow={() => pushRemote(true)} onSyncPull={() => pullRemote(true)} pushState={{ on: !!(state.push && state.push.on), err: pushErr }} onPushOn={enablePush} onPushCheck={() => checkPush(true)} state={state} settings={settings} onSettings={setSettings} onReset={resetAll} onImport={importJSON} onClose={() => setSheet(null)} />}
     </div>
   );
@@ -2092,6 +2120,47 @@ function tradeTargets(power) {
 function posStrength(r, g) { const st = SLOTS.filter((s) => s.elig.length === 1 && s.elig[0] === g).map((s) => (r.L[s.k] ? pw(r.byId[r.L[s.k]]) : 0)); return st.length ? st.reduce((a, b) => a + b, 0) / st.length : 0; }
 let TLINE = null;
 function teamLineupFor(team, players, week) { const L = TLINE && TLINE[week] && TLINE[week][team]; if (L) { const ids = new Set(players.map((p) => p.id)); const ok = SLOTS.every((s0) => !L[s0.k] || ids.has(L[s0.k])); if (ok && Object.values(L).filter(Boolean).length >= 8) return { L, imported: true }; } return { L: bestLineup(players, week), imported: false }; }
+function RankingsView({ week, owner, watch, onWatch, onPlayer }) {
+  const [mode, setMode] = useState("week"); const [pos, setPos] = useState("ALL"); const [avail, setAvail] = useState("all"); const [q, setQ] = useState(""); const [limit, setLimit] = useState(120);
+  const { sort, dir, onSort } = useSort("blend", "desc");
+  const watched = new Set(watch.map((w) => w.id));
+  const weekCols = [["blend", "Blend", "Our this-week number, all sources weighted"], ["fi", "FI", "Fantasy Index weekly projection"], ["fbg", "FBG", "Footballguys weekly projection"], ["pff", "PFF", "PFF weekly rank at the position"], ["ath", "ATH", "Athletic / FantasyPros expert rank"], ["veg", "Vegas", "Implied by props and totals"], ["floor", "Floor", "25th-percentile outcome"], ["ceil", "Ceil", "85th-percentile outcome"], ["mx", "Matchup", "Opponent rank vs the position, 1 = toughest"], ["act", "Actual", "Live or final points"]];
+  const seasonCols = [["blend", "Blend", "Rest of season, per week"], ["fi", "FI", "Fantasy Index per week"], ["fbg", "FBG", "Footballguys per week"], ["pff", "PFF", "PFF per week"], ["rk", "FI rk", "Fantasy Index position rank"], ["rkB", "FBG rk", "Footballguys position rank"], ["adp", "ADP", "Yahoo draft ADP"], ["ppg25", "2025", "Points per game last season"], ["bias", "Trend", "Beating or trailing projections this season"], ["bye", "Bye", "Bye week"]];
+  const cols = mode === "week" ? weekCols : seasonCols;
+  const rows = useMemo(() => {
+    const list = POOL.filter((p) => (pos === "ALL" ? true : pos === "FLEX" ? ["RB", "WR", "TE"].includes(p.p) : p.p === pos)).filter((p) => { const o = owner[p.id]; if (avail === "fa") return !o; if (avail === "mine") return o === ME; if (avail === "owned") return !!o && o !== ME; return true; }).filter((p) => { const t = q.trim().toLowerCase(); return !t || p.n.toLowerCase().includes(t) || p.t.toLowerCase().includes(t) || (owner[p.id] || "").toLowerCase().includes(t); });
+    const out = list.map((p) => { const wk = weekly(p, week) || {}; const bd = mode === "week" ? wkBreakdown(p, week) : null; const r = mode === "week" ? wkRange(p, week) : null; const a = mode === "week" ? actualOf(p, week) : null; const b = biasOf(p); const m = matchup(p.t, week);
+      return mode === "week" ? { p, name: p.n, blend: m.bye ? 0 : wkPts(p, week), fi: wk.fi != null ? wk.fi : null, fbg: wk.fbg ? wk.fbg[0] : null, pff: wk.pff != null ? wk.pff : null, ath: wk.ath != null ? wk.ath : null, veg: vegasFresh(week) ? vegasPts(p) : null, floor: r.floor, ceil: r.ceil, mx: m.bye ? null : mxRank(p, week), act: a ? a.pts : null, live: a ? a.live : false, fin: a ? a.done : false, bye: m.bye, n: bd.parts.filter((x) => x.w > 0).length }
+        : { p, name: p.n, blend: hasProj(p) ? pw(p) : null, fi: p.pwF != null ? p.pwF : null, fbg: p.pwB != null ? p.pwB : null, pff: p.pwP != null ? p.pwP : null, rk: p.rk != null ? p.rk : null, rkB: p.rkB != null ? p.rkB : null, adp: p.a && p.a < 300 ? p.a : null, ppg25: p.s25 ? p.s25.ppg : null, bias: b ? Math.round(b.raw * 100) : null, bye: p.b }; });
+    const sg = dir === "desc" ? -1 : 1; const rankCols = new Set(mode === "week" ? ["pff", "ath", "rk", "rkB", "adp", "mx", "bye"] : ["rk", "rkB", "adp", "bye"]);
+    return out.sort((x, y) => { const a = x[sort], b = y[sort]; if (typeof a === "string") return sg * a.localeCompare(b); const inv = rankCols.has(sort) ? -1 : 1; const av = a == null ? (rankCols.has(sort) ? 1e9 : -1e9) : a * inv, bv = b == null ? (rankCols.has(sort) ? 1e9 : -1e9) : b * inv; return sg * (av - bv); });
+  }, [mode, pos, avail, q, sort, dir, week, owner, VEGAS && VEGAS.at, ACT && ACT[week], LIVE && LIVE.at]);
+  const fmtCell = (k, v, r) => { if (v == null) return "–"; if ((k === "pff" && mode === "week") || k === "ath" || k === "rk" || k === "rkB") return `${r.p.p}${v}`; if (k === "adp" || k === "bye" || k === "mx") return String(Math.round(v)); if (k === "bias") return signed(v) + "%"; return fmt1(v); };
+  const dev = (k, v, r) => { if (mode !== "week" || v == null || r.blend == null || r.blend < 3 || !["fi", "fbg", "veg"].includes(k)) return ""; const d = (v - r.blend) / r.blend; return d >= 0.2 ? " hi" : d <= -0.2 ? " lo" : ""; };
+  const shown = rows.slice(0, limit);
+  return (
+    <section className="card rank">
+      <div className="ch"><h2 className="cond">Rankings</h2><span className="aux"><div className="seg sm"><button className={mode === "week" ? "on" : ""} onClick={() => { setMode("week"); }}>Week {week}</button><button className={mode === "season" ? "on" : ""} onClick={() => { setMode("season"); }}>Season</button></div></span></div>
+      <div className="cb" style={{ paddingTop: 2, paddingBottom: 6 }}>
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search player, NFL team, or owner" />
+        <div className="chips" style={{ marginTop: 8 }}>{["ALL", "QB", "RB", "WR", "TE", "FLEX", "K", "DEF"].map((x) => <button key={x} className={"chip" + (pos === x ? " on" : "")} onClick={() => setPos(x)}>{x === "ALL" ? "All" : x}</button>)}</div>
+        <div className="chips" style={{ marginTop: 6 }}>{[["all", "Everyone"], ["fa", "Free agents"], ["mine", "My team"], ["owned", "Other rosters"]].map(([k, l]) => <button key={k} className={"chip" + (avail === k ? " on" : "") + (k === "fa" ? " hl" : "")} onClick={() => setAvail(k)}>{l}</button>)}</div>
+      </div>
+      <div className="rgwrap"><div className="rg" style={{ gridTemplateColumns: `36px minmax(180px,1fr) 64px ${cols.map(() => "72px").join(" ")}` }}>
+        <div className="rgh"><span>#</span><span className="l">Player</span><span className="l">Owner</span>{cols.map(([k, l, t]) => <button key={k} className={"shb" + (sort === k ? " on" : "")} title={t} onClick={() => onSort(k)}>{l}<i>{sort === k ? (dir === "desc" ? "▼" : "▲") : ""}</i></button>)}</div>
+        {shown.map((r, i) => { const o = owner[r.p.id]; return (
+          <div key={r.p.id} className={"rgr" + (o === ME ? " mine" : "") + (r.bye ? " byew" : "")}>
+            <span className="rk cond">{i + 1}</span>
+            <button className="l pl" onClick={() => onPlayer(r.p.id)}><Badge p={r.p} /><span className="ptxt"><span className="pname"><span className="t">{r.p.n}</span><StatusPill p={r.p} /></span><span className="psub">{r.p.t} {mode === "week" ? (r.bye ? <span className="bye">BYE</span> : <b>{matchup(r.p.t, week).line}</b>) : `bye ${r.p.b}`}{mode === "week" && r.n >= 2 ? <span className="muted">{r.n} sources</span> : null}</span></span></button>
+            <span className="l own"><button className={"star" + (watched.has(r.p.id) ? " on" : "")} onClick={() => onWatch(r.p)} aria-label="Watch">★</button>{o ? <span title={o}><TeamMark team={o} size={24} /></span> : <span className="pill up">FA</span>}</span>
+            {cols.map(([k]) => <span key={k} className={"c cond" + (sort === k ? " on" : "") + dev(k, r[k], r) + (k === "act" && r.act != null ? (r.live ? " live" : " fin") : "")}>{fmtCell(k, r[k], r)}</span>)}
+          </div>); })}
+      </div></div>
+      {rows.length > limit && <button className="morebtn" onClick={() => setLimit((l) => l + 120)}>Show {Math.min(120, rows.length - limit)} more of {rows.length}</button>}
+      <div className="hint">Tap a column to sort; tap again to flip. Green cells are a source 20% above our blend, red 20% below, which is where the sources disagree. Week view: Blend is what the app plays; Actual turns green live and dark when final. Season view: per-week values for the rest of the year, with the draft ADP and last season's scoring for context.</div>
+    </section>
+  );
+}
 function MatchupView({ week, lineup, byId, bench, opp, oppName, myLive, onPlayer, onTeam, onCoach, onBox, results }) {
   if (!opp) return <section className="card"><div className="empty">No opponent this week.</div></section>;
   const mine = SLOTS.map((s0) => ({ s: s0, p: lineup[s0.k] ? byId[lineup[s0.k]] : null })); const theirs = SLOTS.map((s0) => ({ s: s0, p: opp.L[s0.k] ? opp.byId[opp.L[s0.k]] : null }));
