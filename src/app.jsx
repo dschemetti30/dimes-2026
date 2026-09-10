@@ -98,7 +98,11 @@ const TRANSACTIONS = [
   { t: "Sep 7", team: "SOULTRAIN", add: "tank-dell", drop: "cyrus-allen" },
   { t: "Sep 7", team: "SOULTRAIN", add: "samaje-perine", drop: null },
   { t: "Sep 7", team: "What Would Breesus Do", add: "titans-def", drop: "terrance-ferguson" },
+  { t: "Sep 8", team: ME, add: "terrance-ferguson", drop: "raiders-def" },
+  { t: "Sep 8", team: ME, add: "george-holani", drop: "jake-bates" },
+  { t: "Sep 8", team: ME, add: "chris-bell", drop: null },
 ];
+const IR_DEFAULT = ["treveyon-henderson", "jordyn-tyson"];
 const txKey = (t, act, id, team) => `${t}|${act}|${id}|${team}`;
 
 // =============================================================================
@@ -224,10 +228,10 @@ function applyTransactions(s) {
 }
 function freshState() {
   const teams = {}; LEAGUE_TEAMS.forEach((t) => { if (t !== ME) teams[t] = [...TEAMS_INIT[t].r]; });
-  const base = { v: 3, roster: TEAMS_INIT[ME].r.map((id) => ({ ...POOL_BY_ID[id], status: "ok", note: "", via: "Draft" })), teams, lineups: {}, results: {}, watch: [], log: [{ t: "Sep 5", text: "Drafted 16 players from the 9 seat." }], notes: "", chat: [], settings: { theme: "auto", rosterLimit: 17, playoffTeams: 6, bankroll: 500, books: ["FD", "MGM"], modelW: 0.35 }, txSeen: [], scores: {}, bets: [], slip: [], checklist: {} };
+  const base = { v: 3, roster: TEAMS_INIT[ME].r.map((id) => ({ ...POOL_BY_ID[id], status: "ok", note: "", via: "Draft" })), teams, lineups: {}, results: {}, watch: [], log: [{ t: "Sep 5", text: "Drafted 16 players from the 9 seat." }], notes: "", chat: [], settings: { theme: "auto", rosterLimit: 16, playoffTeams: 6, bankroll: 500, books: ["FD", "MGM"], modelW: 0.35 }, txSeen: [], scores: {}, bets: [], slip: [], checklist: {}, limitSeeded: true };
   return applyTransactions(base);
 }
-const SYNC_KEYS = ["roster", "teams", "lineups", "scores", "watch", "log", "notes", "chat", "bets", "slip", "checklist", "txSeen", "vegasHist", "settings", "weeklyUser"];
+const SYNC_KEYS = ["roster", "teams", "lineups", "scores", "watch", "log", "notes", "chat", "bets", "slip", "checklist", "txSeen", "vegasHist", "settings", "weeklyUser", "irSeeded", "limitSeeded"];
 const pickSync = (s) => { const o = {}; SYNC_KEYS.forEach((k) => { if (s[k] !== undefined) o[k] = s[k]; }); if (o.settings) { o.settings = { ...o.settings }; delete o.settings.pin; } return o; };
 function migrate(s) {
   const fresh = freshState();
@@ -240,6 +244,8 @@ function migrate(s) {
   if (!s.scores && s.results) Object.keys(s.results).forEach((w) => { const r = s.results[w]; if (!r) return; out.scores[w] = { ...(out.scores[w] || {}) }; if (r.my !== "" && r.my != null) out.scores[w][ME] = r.my; const o = MY_SCHEDULE[w]; if (o && LSCHED[w] && r.opp !== "" && r.opp != null) out.scores[w][o] = r.opp; });
   out.settings.playoffTeams = out.settings.playoffTeams || 6; out.settings.bankroll = out.settings.bankroll || 500; out.settings.books = out.settings.books || ["FD", "MGM"]; out.settings.modelW = out.settings.modelW || 0.35; out.bets = s.bets || []; out.checklist = s.checklist || {}; out.slip = s.slip || [];
   out = applyTransactions(out);
+  if (!s.irSeeded) { out.roster = out.roster.map((p) => (IR_DEFAULT.includes(p.id) && (!p.status || p.status === "ok") ? { ...p, status: "ir" } : p)); out.irSeeded = true; }
+  if (out.settings.rosterLimit === 17 && !s.limitSeeded) { out.settings.rosterLimit = 16; } out.limitSeeded = true;
   out.v = 3;
   return out;
 }
@@ -741,6 +747,9 @@ textarea.notes{min-height:120px;resize:vertical;line-height:1.5}
 .nmark .bx{position:absolute;inset:0;border-radius:11px;overflow:hidden;display:grid;place-items:center;background-image:linear-gradient(180deg,rgba(255,255,255,.22),rgba(255,255,255,.04) 48%,rgba(0,0,0,.06));box-shadow:inset 0 1px 0 rgba(255,255,255,.25)}
 .nmark .bx i{position:absolute;left:0;right:0;bottom:0;height:3px}
 .pbio .tmwrap{display:inline-flex;align-items:center;gap:6px;font-weight:700;color:var(--ink)}
+.syncbox{margin-top:8px;border-radius:10px;padding:9px 12px;background:var(--surface2);border-left:4px solid var(--ink3)}
+.syncbox.good{border-left-color:var(--go);background:var(--go-bg)}.syncbox.bad{border-left-color:var(--stop);background:var(--stop-bg)}
+.syncbox b{display:block;font-size:13.5px}.syncbox small{display:block;color:var(--ink2);font-size:12px;margin-top:3px}
 .tbl{padding:0 0 4px}
 .sth{display:grid;grid-template-columns:minmax(0,1fr) repeat(5,minmax(46px,60px));gap:4px;align-items:center;padding:6px 16px 4px;border-bottom:1px solid var(--rule)}
 .tbl.metrics .sth,.tbl.metrics .tr{grid-template-columns:minmax(0,1fr) repeat(8,minmax(40px,52px))}
@@ -1254,7 +1263,7 @@ export default function App() {
   const addLog = (s, text) => ({ ...s, log: [{ t: today(), text }, ...s.log].slice(0, 100) });
   const showToast = (text, undoable) => { if (toastTimer.current) clearTimeout(toastTimer.current); setToast({ text, undoable }); toastTimer.current = setTimeout(() => setToast(null), 6000); };
   const undoable = (fn, text) => { undoRef.current = state; update(fn); showToast(text, true); };
-  const undo = () => { if (undoRef.current) { setState(undoRef.current); undoRef.current = null; } setToast(null); };
+  const undo = () => { if (undoRef.current) { const prev = undoRef.current; update(() => prev); undoRef.current = null; } setToast(null); };
 
   // ---- derived ---------------------------------------------------------------
   const settings = state ? state.settings : { theme: "auto", rosterLimit: 17 };
@@ -1267,23 +1276,28 @@ export default function App() {
     const id = setInterval(pull, 10 * 60e3); return () => clearInterval(id);
   }, [week, loaded.current, !!state]);
   // Cross-device sync: pull on load and on focus, push (debounced) after changes. Last write wins by updatedAt.
-  const [syncMsg, setSyncMsg] = useState(""); const syncBusy = useRef(false); const lastPushed = useRef(0);
+  const [syncMsg, setSyncMsg] = useState(""); const [syncOk, setSyncOk] = useState(null); const syncBusy = useRef(false); const lastPushed = useRef(0); const stateRef = useRef(null); stateRef.current = state;
   const pin = settings.pin || "";
   const pullRemote = useCallback(async (force) => {
     if (!pin || syncBusy.current) return; const base = WEB ? "" : (settings.apiBase || DEFAULT_API).replace(/\/$/, ""); syncBusy.current = true;
     try { const r = await fetch(`${base}/api/state`, { headers: { "x-dimes-pin": pin, Accept: "application/json" } }); const j = await r.json();
-      if (!r.ok) { setSyncMsg(j.error || `sync error ${r.status}`); return; }
-      if (j.empty) { setSyncMsg("Nothing saved online yet"); return; }
+      if (!r.ok) { setSyncMsg(j.error || `sync error ${r.status}`); setSyncOk(false); return; }
+      if (j.empty) { setSyncMsg("Nothing saved online yet, pushing this device's copy"); setSyncOk(true); lastPushed.current = 0; return; }
       setState((s) => { if (!force && (s.updatedAt || 0) >= j.updatedAt) return s; lastPushed.current = j.updatedAt; setSyncMsg(`Pulled ${new Date(j.updatedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}${j.device ? ` from ${j.device}` : ""}`); return migrate({ ...s, ...j.data, settings: { ...(j.data.settings || {}), pin: s.settings.pin, apiBase: s.settings.apiBase }, updatedAt: j.updatedAt }); });
-    } catch (e) { setSyncMsg("Sync offline"); } finally { syncBusy.current = false; }
+    } catch (e) { setSyncMsg("Sync offline"); setSyncOk(false); } finally { syncBusy.current = false; }
+  }, [pin, settings.apiBase]);
+  const pushRemote = useCallback(async (force) => {
+    const st = stateRef.current; if (!st || !pin) return; const base = WEB ? "" : (settings.apiBase || DEFAULT_API).replace(/\/$/, "");
+    try { const body = { updatedAt: st.updatedAt || Date.now(), device: typeof navigator !== "undefined" && /Mobi|iPhone|Android/i.test(navigator.userAgent) ? "phone" : "desktop", data: pickSync(st) }; const r = await fetch(`${base}/api/state${force ? "?force=1" : ""}`, { method: "POST", headers: { "Content-Type": "application/json", "x-dimes-pin": pin }, body: JSON.stringify(body) }); const j = await r.json();
+      if (r.status === 409 && j.remote) { setSyncMsg("Newer save found online, pulled it"); setSyncOk(true); setState((s) => migrate({ ...s, ...j.remote.data, settings: { ...(j.remote.data.settings || {}), pin: s.settings.pin, apiBase: s.settings.apiBase }, updatedAt: j.remote.updatedAt })); lastPushed.current = j.remote.updatedAt; return; }
+      if (!r.ok) { setSyncMsg(j.error || `sync error ${r.status}`); setSyncOk(false); return; }
+      lastPushed.current = body.updatedAt; setSyncMsg(`Synced ${new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`); setSyncOk(true); if (force) showToast("Pushed to the cloud."); } catch (e) { setSyncMsg("Sync offline, saved on this device"); setSyncOk(false); }
   }, [pin, settings.apiBase]);
   useEffect(() => { if (loaded.current && pin) pullRemote(false); const f = () => { if (document.visibilityState === "visible") pullRemote(false); }; document.addEventListener("visibilitychange", f); return () => document.removeEventListener("visibilitychange", f); }, [pin, loaded.current, pullRemote]);
   useEffect(() => {
     if (!state || !loaded.current || !pin || !state.updatedAt || state.updatedAt <= lastPushed.current) return;
-    const base = WEB ? "" : (settings.apiBase || DEFAULT_API).replace(/\/$/, "");
-    const t = setTimeout(async () => { try { const body = { updatedAt: state.updatedAt, device: typeof navigator !== "undefined" && /Mobi|iPhone|Android/i.test(navigator.userAgent) ? "phone" : "desktop", data: pickSync(state) }; const r = await fetch(`${base}/api/state`, { method: "POST", headers: { "Content-Type": "application/json", "x-dimes-pin": pin }, body: JSON.stringify(body) }); const j = await r.json(); if (r.status === 409 && j.remote) { setSyncMsg("Newer save found online, pulled it"); setState((s) => migrate({ ...s, ...j.remote.data, settings: { ...(j.remote.data.settings || {}), pin: s.settings.pin, apiBase: s.settings.apiBase }, updatedAt: j.remote.updatedAt })); lastPushed.current = j.remote.updatedAt; return; } if (!r.ok) { setSyncMsg(j.error || `sync error ${r.status}`); return; } lastPushed.current = state.updatedAt; setSyncMsg(`Synced ${new Date().toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}`); } catch (e) { setSyncMsg("Sync offline, saved on this device"); } }, 2000);
-    return () => clearTimeout(t);
-  }, [state && state.updatedAt, pin]);
+    const t = setTimeout(() => pushRemote(false), 1500); return () => clearTimeout(t);
+  }, [state && state.updatedAt, pin, pushRemote]);
   // Daily health sync: official injury reports + roster status, at most every 6 hours
   useEffect(() => {
     if (!state || !loaded.current) return; const h = state.health; if (h && h.at && Date.now() - h.at < 6 * 3600e3) return;
@@ -1360,8 +1374,8 @@ export default function App() {
   const teamAdd = (team, pl) => undoable((s) => addLog({ ...s, teams: { ...s.teams, [team]: [...s.teams[team].filter((x) => x !== pl.id), pl.id] }, watch: s.watch.filter((w) => w.id !== pl.id) }, `${team} added ${pl.n}.`), `${team} added ${pl.n}.`);
   const teamDrop = (team, id) => { const p = POOL_BY_ID[id]; undoable((s) => addLog({ ...s, teams: { ...s.teams, [team]: s.teams[team].filter((x) => x !== id) } }, `${team} dropped ${p ? p.n : id}.`), `${team} dropped ${p ? p.n : "player"}.`); };
   const executeTrade = (team, giveIds, getIds) => { const give = roster.filter((p) => giveIds.includes(p.id)); const get = getIds.map((id) => POOL_BY_ID[id]); undoable((s) => { let lineups = s.lineups; giveIds.forEach((id) => { lineups = stripFromLineups(lineups, id); }); const ns = { ...s, roster: [...s.roster.filter((p) => !giveIds.includes(p.id)), ...get.map((p) => ({ ...p, status: "ok", note: "", via: `Trade with ${team}` }))], lineups, teams: { ...s.teams, [team]: [...s.teams[team].filter((id) => !getIds.includes(id)), ...giveIds] } }; return addLog(ns, `Trade with ${team}: got ${get.map((p) => p.n).join(", ")} for ${give.map((p) => p.n).join(", ")}.`); }, `Trade logged with ${team}.`); };
-  const resetAll = () => { setState(freshState()); setSheet(null); showToast("Back to draft day, plus the Sept 7 moves."); };
-  const importJSON = (txt) => { try { const s = JSON.parse(txt); if (!s.roster || !Array.isArray(s.roster)) throw new Error("bad"); setState(migrate(s)); setSheet(null); showToast("Backup restored."); return true; } catch (e) { return false; } };
+  const resetAll = () => { update(() => freshState()); setSheet(null); showToast("Back to draft day, plus the logged moves."); };
+  const importJSON = (txt) => { try { const s = JSON.parse(txt); if (!s.roster || !Array.isArray(s.roster)) throw new Error("bad"); update(() => migrate(s)); setSheet(null); showToast("Backup restored."); return true; } catch (e) { return false; } };
   const askCoach = (text) => { setCoachPrefill(text); setSheet(null); setTab("coach"); };
   const addLeg = (leg) => update((s) => { const slip = s.slip || []; if (slip.some((l) => l.id === leg.id)) { showToast("Already on the slip."); return s; } if (slip.length >= 8) { showToast("Eight legs is the limit here."); return s; } showToast(`Added ${leg.label} to the slip.`); return { ...s, slip: [...slip, leg] }; });
   const removeLeg = (id) => update((s) => ({ ...s, slip: (s.slip || []).filter((l) => l.id !== id) }));
@@ -1475,9 +1489,10 @@ export default function App() {
       {sheet && sheet.type === "scores" && <ScoresSheet week={week} scores={state.scores || {}} onScore={setScore} onClose={() => setSheet(null)} teams={state.teams} myIds={active.map((p) => p.id)} myLineup={state.lineups[week] || null} />}
       {sheet && sheet.type === "import" && <ImportSheet seen={state.txSeen || []} onApply={(mv) => { applyMoves(mv); setSheet(null); }} onClose={() => setSheet(null)} apiBase={apiBase} week={week} roster={roster} teams={state.teams} onScores={setScore}
         onLineup={(L, irIds) => { update((s) => ({ ...s, lineups: { ...s.lineups, [week]: L }, roster: s.roster.map((p) => (irIds.includes(p.id) ? { ...p, status: "ir" } : p.status === "ir" && !irIds.includes(p.id) ? { ...p, status: "ok" } : p)) })); showToast(`Week ${week} lineup set from Yahoo.`); }}
+        onMyRoster={(players, L, irIds, adds, drops) => { undoable((s) => { const ids = players.map((p) => p.id); const strip = (id) => { Object.keys(s.teams).forEach((t) => { s.teams[t] = s.teams[t].filter((x) => x !== id); }); }; ids.forEach(strip); const keep = Object.fromEntries(s.roster.map((p) => [p.id, p])); s.roster = players.map((p) => ({ ...(POOL_BY_ID[p.id] || p), ...(keep[p.id] ? { note: keep[p.id].note, via: keep[p.id].via } : { note: "", via: "Yahoo" }), status: irIds.includes(p.id) ? "ir" : keep[p.id] && keep[p.id].status && keep[p.id].status !== "ir" ? keep[p.id].status : "ok" })); s.lineups = { ...s.lineups, [week]: Object.keys(L).length >= 8 ? L : (s.lineups[week] || null) }; s.watch = s.watch.filter((w) => !ids.includes(w.id)); let ns = { ...s }; adds.forEach((p) => { ns = addLog(ns, `Added ${p.n} (from your Yahoo roster).`); }); drops.forEach((p) => { ns = addLog(ns, `Dropped ${p.n} (from your Yahoo roster).`); }); return ns; }, `Roster synced from Yahoo: ${adds.length} added, ${drops.length} removed.`); }}
         onRoster={(team, players) => { undoable((s) => { const ids = players.map((p) => p.id); const strip = (id) => { s.roster = s.roster.filter((p) => p.id !== id); Object.keys(s.teams).forEach((t) => { s.teams[t] = s.teams[t].filter((x) => x !== id); }); }; ids.forEach(strip); if (team === ME) { s.roster = [...s.roster, ...players.map((p) => ({ ...(POOL_BY_ID[p.id] || p), status: "ok", note: "", via: "Yahoo" }))]; } else s.teams = { ...s.teams, [team]: ids }; return addLog({ ...s }, `${team === ME ? "Your" : team + "'s"} roster replaced from Yahoo (${ids.length} players).`); }, `${team} roster updated.`); }} />}
       {sheet && sheet.type === "sources" && <WeeklySourcesSheet week={week} existing={!!(state.weeklyUser && state.weeklyUser[week])} onSave={(out) => { update((s) => ({ ...s, weeklyUser: { ...(s.weeklyUser || {}), [week]: { ...((s.weeklyUser || {})[week] || {}), ...out } } })); showToast(`Week ${week} sources saved.`); }} onClose={() => setSheet(null)} />}
-      {sheet && sheet.type === "menu" && <MenuSheet state={state} settings={settings} onSettings={setSettings} onReset={resetAll} onImport={importJSON} onClose={() => setSheet(null)} />}
+      {sheet && sheet.type === "menu" && <MenuSheet syncState={{ msg: syncMsg, ok: syncOk }} onSyncNow={() => pushRemote(true)} onSyncPull={() => pullRemote(true)} state={state} settings={settings} onSettings={setSettings} onReset={resetAll} onImport={importJSON} onClose={() => setSheet(null)} />}
     </div>
   );
 }
@@ -2474,15 +2489,15 @@ function EdgeView({ week, vegas, vegasBusy, vegasErr, onVegas, apiBase, owner, o
 // =============================================================================
 // IMPORT (paste from Yahoo transactions)
 // =============================================================================
-function ImportSheet({ seen, onApply, onClose, apiBase, week, roster, teams, onScores, onLineup, onRoster }) {
-  const [kind, setKind] = useState("transactions"); const [txt, setTxt] = useState(""); const [img, setImg] = useState(null); const [busy, setBusy] = useState(false); const [err, setErr] = useState(""); const [moves, setMoves] = useState(null); const [parsed, setParsed] = useState(null);
-  const KINDS = [["transactions", "Transactions"], ["scores", "Scores"], ["lineup", "My lineup"], ["roster", "A roster"]];
-  const pickImage = (f) => { if (!f) return; const rd = new FileReader(); rd.onload = () => { const image = new Image(); image.onload = () => { const max = 1600; const sc = Math.min(1, max / Math.max(image.width, image.height)); const c = document.createElement("canvas"); c.width = Math.round(image.width * sc); c.height = Math.round(image.height * sc); c.getContext("2d").drawImage(image, 0, 0, c.width, c.height); setImg(c.toDataURL("image/jpeg", 0.85)); }; image.src = rd.result; }; rd.readAsDataURL(f); };
+function ImportSheet({ seen, onApply, onClose, apiBase, week, roster, teams, onScores, onLineup, onRoster, onMyRoster }) {
+  const [kind, setKind] = useState("myroster"); const [txt, setTxt] = useState(""); const [imgs, setImgs] = useState([]); const img = imgs[0] || null; const [busy, setBusy] = useState(false); const [err, setErr] = useState(""); const [moves, setMoves] = useState(null); const [parsed, setParsed] = useState(null);
+  const KINDS = [["myroster", "My roster"], ["transactions", "Transactions"], ["scores", "Scores"], ["roster", "Other team"]];
+  const pickImages = (files) => { Array.from(files || []).slice(0, 4).forEach((f) => { const rd = new FileReader(); rd.onload = () => { const image = new Image(); image.onload = () => { const max = 1800; const sc = Math.min(1, max / Math.max(image.width, image.height)); const c = document.createElement("canvas"); c.width = Math.round(image.width * sc); c.height = Math.round(image.height * sc); c.getContext("2d").drawImage(image, 0, 0, c.width, c.height); setImgs((arr) => [...arr, c.toDataURL("image/jpeg", 0.85)].slice(0, 4)); }; image.src = rd.result; }; rd.readAsDataURL(f); }); };
   const read = async () => {
     setErr(""); setMoves(null); setParsed(null);
     if (kind === "transactions" && txt.trim() && !img) { const mv = parseYahooTx(txt); setMoves(mv.map((m) => ({ ...m, skip: seen.includes(m.key) }))); return; }
     setBusy(true);
-    try { const r = await fetch(`${apiBase}/api/parse`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind, text: txt || undefined, image: img ? img.split(",")[1] : undefined, mediaType: "image/jpeg" }) }); const j = await r.json(); if (!r.ok || j.error) throw new Error(j.error || `server ${r.status}`);
+    try { const apiKind = kind === "myroster" ? "roster" : kind; const r = await fetch(`${apiBase}/api/parse`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: apiKind, text: txt || undefined, images: imgs.length ? imgs.map((x) => x.split(",")[1]) : undefined, mediaType: "image/jpeg" }) }); const raw = await r.text(); let j; try { j = JSON.parse(raw); } catch (e) { throw new Error(r.status === 404 ? "The reader is not deployed yet (api/parse.js is missing on the server)." : `server ${r.status}: ${raw.slice(0, 120)}`); } if (!r.ok || j.error) throw new Error(j.error || `server ${r.status}`);
       if (kind === "transactions") { const arr = Array.isArray(j.data) ? j.data : []; const mv = arr.map((x) => { const team = LEAGUE_TEAMS.find((t) => t.toLowerCase() === String(x.team || "").toLowerCase()) || ""; const to = x.to ? LEAGUE_TEAMS.find((t) => t.toLowerCase() === String(x.to).toLowerCase()) || "" : ""; const pos = String(x.pos || "").toUpperCase() === "DST" ? "DEF" : String(x.pos || "").toUpperCase(); const nfl = YT[String(x.nfl || "").toLowerCase()] || String(x.nfl || "").toUpperCase(); const player = findPlayer(x.player || "", nfl, pos); const act = x.action === "trade" ? "trade" : x.action === "drop" ? "drop" : "add"; const t2 = act === "trade" ? (to || team) : team; return { key: `${x.date || ""}|${act}|${player.id}|${t2}`, date: x.date || "", act, player, team: t2, teams: [team, to].filter(Boolean) }; }); setMoves(mv.map((m) => ({ ...m, skip: seen.includes(m.key) }))); }
       else setParsed(j.data);
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
@@ -2496,12 +2511,12 @@ function ImportSheet({ seen, onApply, onClose, apiBase, week, roster, teams, onS
       {!moves && !parsed && (<>
         <div className="field"><textarea className="notes" value={txt} onChange={(e) => setTxt(e.target.value)} placeholder={kind === "transactions" ? "Paste the Transactions page" : kind === "scores" ? "Paste the Scoreboard or Standings page" : "Or paste the roster page text"} style={{ minHeight: 120, fontSize: 14 }} /></div>
         <div className="btns" style={{ paddingTop: 0 }}>
-          <label className="btn" style={{ display: "inline-flex", alignItems: "center", cursor: "pointer" }}>{img ? "Change screenshot" : "Upload screenshot"}<input type="file" accept="image/*" style={{ display: "none" }} onChange={(e) => pickImage(e.target.files && e.target.files[0])} /></label>
-          {img && <img src={img} alt="" style={{ height: 42, borderRadius: 8, border: "1px solid var(--rule)" }} />}
+          <label className="btn" style={{ display: "inline-flex", alignItems: "center", cursor: "pointer" }}>{imgs.length ? `Add screenshot (${imgs.length})` : "Upload screenshot"}<input type="file" accept="image/*" multiple style={{ display: "none" }} onChange={(e) => pickImages(e.target.files)} /></label>
+          {imgs.map((im, i) => <img key={i} src={im} alt="" style={{ height: 42, borderRadius: 8, border: "1px solid var(--rule)" }} onClick={() => setImgs((arr) => arr.filter((_, j) => j !== i))} title="Tap to remove" />)}
           <button className="btn pri" disabled={busy || (!txt.trim() && !img)} onClick={read}>{busy ? "Reading" : "Read it"}</button>
         </div>
         {err && <div className="hint" style={{ color: "var(--stop)", paddingTop: 0 }}>{err}</div>}
-        <div className="hint">{kind === "transactions" ? "Adds, drops and trades. Already-logged moves are skipped, so paste the whole page every week." : kind === "scores" ? "Reads the weekly scoreboard (all seven matchups) or the standings table." : kind === "lineup" ? "Reads your Yahoo roster page and sets this week's lineup, bench and IR to match it." : "Reads another team's roster page and replaces that team's roster here."}</div>
+        <div className="hint">{kind === "myroster" ? "The reliable way. Screenshot your whole Yahoo roster page (two shots if it is long). You will see exactly who gets added and removed before it applies, and it sets this week's lineup and IR to match." : kind === "transactions" ? "Adds, drops and trades. Already-logged moves are skipped, so paste the whole page every week." : kind === "scores" ? "Reads the weekly scoreboard (all seven matchups) or the standings table." : "Reads another team's roster page and replaces that team's roster here."}</div>
       </>)}
       {moves && (<>
         <div className="ssec"><span>{moves.length} move{moves.length === 1 ? "" : "s"} found</span><span>{moves.filter((m) => m.skip).length} already logged</span></div>
@@ -2521,12 +2536,20 @@ function ImportSheet({ seen, onApply, onClose, apiBase, week, roster, teams, onS
         {!st && <div className="card">{arr.map((m, i) => <div key={i} className="scrow"><label><span>{m.a}</span><input readOnly value={m.sa != null ? m.sa : ""} /></label><span className="vs">vs</span><label><input readOnly value={m.sb != null ? m.sb : ""} /><span>{m.b}</span></label></div>)}</div>}
         {!st && <div className="btns"><button className="btn pri" onClick={() => { arr.forEach((m) => { const a = LEAGUE_TEAMS.find((t) => t.toLowerCase() === String(m.a || "").toLowerCase()), b = LEAGUE_TEAMS.find((t) => t.toLowerCase() === String(m.b || "").toLowerCase()); if (a && m.sa != null) onScores(w, a, String(m.sa)); if (b && m.sb != null) onScores(w, b, String(m.sb)); }); onClose(); }}>Save week {w} scores</button><button className="btn" onClick={() => setParsed(null)}>Back</button></div>}
       </>); })()}
-      {parsed && kind === "lineup" && (() => { const L = {}; const used = new Set(); const miss = []; const slotCount = {}; (parsed.starters || []).forEach((x) => { const p = matchName(x); const mine = roster.find((r) => r.id === p.id); if (!mine) { miss.push(p.n); return; } let slot = String(x.slot || "").toUpperCase().replace("W/R/T", "FLEX").replace("D/ST", "DEF"); if (slot === "RB" || slot === "WR" || slot === "FLEX") { slotCount[slot] = (slotCount[slot] || 0) + 1; slot = slot + slotCount[slot]; } if (SLOTS.find((s0) => s0.k === slot) && !used.has(p.id)) { L[slot] = p.id; used.add(p.id); } }); const ir = (parsed.ir || []).map(matchName).filter((p) => roster.find((r) => r.id === p.id)); return (<>
+      {parsed && kind === "lineup_disabled" && (() => { const L = {}; const used = new Set(); const miss = []; const slotCount = {}; (parsed.starters || []).forEach((x) => { const p = matchName(x); const mine = roster.find((r) => r.id === p.id); if (!mine) { miss.push(p.n); return; } let slot = String(x.slot || "").toUpperCase().replace("W/R/T", "FLEX").replace("D/ST", "DEF"); if (slot === "RB" || slot === "WR" || slot === "FLEX") { slotCount[slot] = (slotCount[slot] || 0) + 1; slot = slot + slotCount[slot]; } if (SLOTS.find((s0) => s0.k === slot) && !used.has(p.id)) { L[slot] = p.id; used.add(p.id); } }); const ir = (parsed.ir || []).map(matchName).filter((p) => roster.find((r) => r.id === p.id)); return (<>
         <div className="ssec"><span>Lineup read</span><span>{Object.keys(L).length} of 10 slots</span></div>
         <div className="card">{SLOTS.map((s0) => { const p = L[s0.k] ? roster.find((r) => r.id === L[s0.k]) : null; return p ? <PRow key={s0.k} p={p} week={week} badge={<Badge slot={s0.label} p={p} />} right={<Val p={p} week={week} />} /> : <div key={s0.k} className="prow dim"><Badge slot={s0.label} empty /><span className="pname">Not found</span><span /></div>; })}</div>
         {ir.length > 0 && <div className="hint">IR: {ir.map((p) => p.n).join(", ")}</div>}
         {miss.length > 0 && <div className="hint" style={{ color: "var(--stop)" }}>Not on your roster here: {miss.join(", ")}. Log the pickup under Transactions first, then read the lineup again.</div>}
         <div className="btns"><button className="btn pri" onClick={() => { onLineup(L, ir.map((p) => p.id)); onClose(); }}>Use this lineup</button><button className="btn" onClick={() => setParsed(null)}>Back</button></div>
+      </>); })()}
+      {parsed && kind === "myroster" && (() => { const items = (parsed.players || []).map((x) => ({ ...x, p: matchName(x) })); const ids = new Set(items.map((x) => x.p.id)); const adds = items.filter((x) => !roster.find((r) => r.id === x.p.id)); const drops = roster.filter((r) => !ids.has(r.id)); const ir = items.filter((x) => String(x.slot || "").toUpperCase() === "IR" || /^IR/i.test(String(x.status || ""))).map((x) => x.p.id); const L = {}; const cnt = {}; items.forEach((x) => { let slot = String(x.slot || "").toUpperCase().replace("W/R/T", "FLEX").replace("D/ST", "DEF"); if (slot === "BN" || slot === "IR" || !slot) return; if (slot === "RB" || slot === "WR" || slot === "FLEX") { cnt[slot] = (cnt[slot] || 0) + 1; slot = slot + cnt[slot]; } if (SLOTS.find((s0) => s0.k === slot)) L[slot] = x.p.id; }); return (<>
+        <div className="ssec"><span>{items.length} players read</span><span>{adds.length} to add, {drops.length} to remove</span></div>
+        {adds.length > 0 && <div className="card"><div className="ch"><h2 className="cond" style={{ fontSize: 14 }}>Adding</h2></div>{adds.map((x) => <PRow key={x.p.id} p={x.p} week={week} sub={x.p.custom ? "new to the app" : undefined} right={<Val p={x.p} label="per wk" />} />)}</div>}
+        {drops.length > 0 && <div className="card"><div className="ch"><h2 className="cond" style={{ fontSize: 14 }}>Removing</h2></div>{drops.map((p) => <PRow key={p.id} p={p} week={week} right={<span className="pill d">Gone</span>} />)}</div>}
+        {adds.length === 0 && drops.length === 0 && <div className="hint">Roster already matches. This will still set the lineup and IR.</div>}
+        <div className="hint">Lineup read: {Object.keys(L).length} of 10 slots. IR: {ir.length ? ir.map((id) => (POOL_BY_ID[id] || {}).n || id).join(", ") : "none"}.</div>
+        <div className="btns"><button className="btn pri" onClick={() => { onMyRoster(items.map((x) => x.p), L, ir, adds.map((x) => x.p), drops); onClose(); }}>Apply to my roster</button><button className="btn" onClick={() => setParsed(null)}>Back</button></div>
       </>); })()}
       {parsed && kind === "roster" && (() => { const players = (parsed.players || []).map(matchName); const [team, setTeam] = [parsed._team || (LEAGUE_TEAMS.find((t) => t.toLowerCase() === String(parsed.team || "").toLowerCase()) || ""), (t) => setParsed({ ...parsed, _team: t })]; return (<>
         <div className="ssec"><span>{players.length} players read</span></div>
@@ -2558,7 +2581,7 @@ function WeeklySourcesSheet({ week, onSave, onClose, existing }) {
 // =============================================================================
 // MENU
 // =============================================================================
-function MenuSheet({ state, settings, onSettings, onReset, onImport, onClose }) {
+function MenuSheet({ syncState, onSyncNow, onSyncPull, state, settings, onSettings, onReset, onImport, onClose }) {
   const [mode, setMode] = useState("main"); const [txt, setTxt] = useState(""); const [msg, setMsg] = useState(""); const [confirm, setConfirm] = useState(false);
   const json = JSON.stringify({ ...state, chat: [] });
   const copy = async () => { try { await navigator.clipboard.writeText(json); setMsg("Copied. Paste it somewhere safe."); } catch (e) { setMsg("Copy blocked here. Select the text and copy it."); setMode("export"); } };
@@ -2575,7 +2598,10 @@ function MenuSheet({ state, settings, onSettings, onReset, onImport, onClose }) 
         </div>
         {!WEB && <div className="field"><label>Lines server</label><input value={settings.apiBase || DEFAULT_API} onChange={(e) => onSettings({ apiBase: e.target.value })} placeholder={DEFAULT_API} /><div className="small muted" style={{ marginTop: 6 }}>Your Vercel deployment. <a href={(settings.apiBase || DEFAULT_API)} target="_blank" rel="noreferrer" style={{ color: "var(--info)", fontWeight: 700 }}>Open the web version</a> if this view cannot reach it.</div></div>}
         {state.vegas && state.vegas.credits && <div className="hint" style={{ paddingTop: 0 }}>Odds API credits: {state.vegas.credits.used} used, {state.vegas.credits.remaining} remaining this month.</div>}
-        <div className="field"><label>Sync across devices</label><input type="password" inputMode="numeric" value={settings.pin || ""} onChange={(e) => onSettings({ pin: e.target.value })} placeholder="Enter your DIMES_PIN" autoComplete="off" /><div className="small muted" style={{ marginTop: 6 }}>{settings.pin ? "On. Everything you enter (rosters, moves, lineups, scores, notes, bets, settings) saves to your Vercel database and follows you to any browser that has this PIN." : "Enter the PIN you set as DIMES_PIN in Vercel. Same PIN on your phone and desktop and they share one save."}</div></div>
+        <div className="field"><label>Sync across devices</label><input type="password" inputMode="numeric" value={settings.pin || ""} onChange={(e) => onSettings({ pin: e.target.value })} placeholder="Enter your DIMES_PIN" autoComplete="off" />
+          <div className={"syncbox" + (syncState.ok === false ? " bad" : syncState.ok ? " good" : "")}><b>{settings.pin ? (syncState.msg || "Waiting for first sync") : "Off"}</b><small>{settings.pin ? "Every change pushes within two seconds; opening the app or returning to it pulls the newest save." : "Enter the PIN you set as DIMES_PIN in Vercel. Same PIN on your phone and desktop and they share one save."}</small></div>
+          {settings.pin && <div className="btns" style={{ paddingTop: 6 }}><button className="btn sm pri" onClick={onSyncNow}>Push now</button><button className="btn sm" onClick={onSyncPull}>Pull from cloud</button></div>}
+        </div>
         <div className="field"><label>Where you bet</label><div className="chips">{[["FD", "FanDuel"], ["MGM", "BetMGM"], ["DK", "DraftKings"]].map(([k, l]) => <button key={k} className={"chip" + ((settings.books || []).includes(k) ? " on" : "")} onClick={() => { const b = settings.books || []; onSettings({ books: b.includes(k) ? b.filter((x) => x !== k) : [...b, k] }); }}>{l}</button>)}</div><div className="small muted" style={{ marginTop: 6 }}>Best prices and suggested bets only use these books. Everything still counts toward fair value.</div></div>
         <div className="field"><label>Trust in the projections: {Math.round((settings.modelW || 0.35) * 100)}%</label><input type="range" min="20" max="65" step="5" value={Math.round((settings.modelW || 0.35) * 100)} onChange={(e) => onSettings({ modelW: parseInt(e.target.value, 10) / 100 })} /><div className="small muted" style={{ marginTop: 6 }}>How much weight Fantasy Index and PFF get against the book's line when pricing a prop. The engine's backtest supports 35%. Push it up and you will see more plays and bigger edges; they will also be less reliable.</div></div>
         <div className="field"><label>Bankroll for stake sizing</label><input inputMode="decimal" value={settings.bankroll || 500} onChange={(e) => onSettings({ bankroll: parseFloat(e.target.value) || 0 })} /><div className="small muted" style={{ marginTop: 6 }}>Edge suggests quarter-Kelly stakes capped at 3% of this number.</div></div>
