@@ -64,7 +64,7 @@ const TEAM_PAL = { ARI:["#97233F","#FFB612"], ATL:["#A71930","#000000"], BAL:["#
 function lum(hex) { const n = parseInt(hex.slice(1), 16); const f = (c) => { c /= 255; return c <= 0.03928 ? c / 12.92 : Math.pow((c + 0.055) / 1.055, 2.4); }; return 0.2126 * f(n >> 16) + 0.7152 * f((n >> 8) & 255) + 0.0722 * f(n & 255); }
 function contrast(a, b) { const la = lum(a), lb = lum(b); return (Math.max(la, lb) + 0.05) / (Math.min(la, lb) + 0.05); }
 const TEAM_STYLE = {};
-Object.keys(TEAM_PAL).forEach((t) => { const [a, b] = TEAM_PAL[t]; const dark = lum(a) <= lum(b) ? a : b, light = dark === a ? b : a; TEAM_STYLE[t] = { bg: dark, line: light, text: contrast(light, dark) >= 2.4 ? light : "#FFFFFF" }; });
+Object.keys(TEAM_PAL).forEach((t) => { const [a, b] = TEAM_PAL[t]; const dark = lum(a) <= lum(b) ? a : b, light = dark === a ? b : a; TEAM_STYLE[t] = { bg: dark, line: light, text: contrast(light, dark) >= 3 ? light : "#FFFFFF", ink: contrast(dark, "#FFFFFF") >= 3 ? dark : "#0E1A38" }; });
 const TEAM_COLOR = Object.fromEntries(Object.keys(TEAM_PAL).map((t) => [t, TEAM_STYLE[t].bg]));
 const TEAM_BYE = {};
 TEAMS.forEach((t) => { for (let w = 5; w <= 14; w++) { if (!NFL[w][t]) { TEAM_BYE[t] = w; break; } } });
@@ -736,6 +736,38 @@ textarea.notes{min-height:120px;resize:vertical;line-height:1.5}
 .toast .in button{color:#FF8DA1;font-weight:800;flex:none;text-transform:uppercase;letter-spacing:.1em;font-size:12px}
 .dark .toast .in button{color:var(--red)}
 
+/* ---- NFL marks, sortable tables, cards ---- */
+.nmark{display:inline-grid;place-items:center;position:relative;flex:none;vertical-align:middle;border-radius:11px;font-weight:900;letter-spacing:.03em;box-shadow:0 1px 2px rgba(11,34,101,.14)}
+.nmark .bx{position:absolute;inset:0;border-radius:11px;overflow:hidden;display:grid;place-items:center;background-image:linear-gradient(180deg,rgba(255,255,255,.22),rgba(255,255,255,.04) 48%,rgba(0,0,0,.06));box-shadow:inset 0 1px 0 rgba(255,255,255,.25)}
+.nmark .bx i{position:absolute;left:0;right:0;bottom:0;height:3px}
+.pbio .tmwrap{display:inline-flex;align-items:center;gap:6px;font-weight:700;color:var(--ink)}
+.tbl{padding:0 0 4px}
+.sth{display:grid;grid-template-columns:minmax(0,1fr) repeat(5,minmax(46px,60px));gap:4px;align-items:center;padding:6px 16px 4px;border-bottom:1px solid var(--rule)}
+.tbl.metrics .sth,.tbl.metrics .tr{grid-template-columns:minmax(0,1fr) repeat(8,minmax(40px,52px))}
+.sth .fst{font-size:9.5px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--ink3)}
+.shb{font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--ink3);text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding:6px 0;border-radius:6px;display:flex;justify-content:flex-end;gap:3px;align-items:center;transition:color .15s,background .15s}
+.shb i{font-style:normal;font-size:7px;width:8px;text-align:center}
+.shb.on{color:var(--ink)}
+.shb:hover{color:var(--ink);background:var(--press)}
+.tbl .tr{display:grid;grid-template-columns:minmax(0,1fr) repeat(5,minmax(46px,60px));gap:4px;align-items:center;padding:6px 16px;border-top:1px solid var(--rule);transition:background .12s}
+.tbl .tr:first-of-type{border-top:none}
+.tbl .tr:hover{background:var(--press)}
+.tbl .tr .rowhit{padding:4px 0;min-width:0}
+.tbl .tr .ptxt{min-width:0}
+.tbl .tr .c{text-align:right;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink2)}
+.tbl .tr .c.on{color:var(--ink);font-weight:800}
+@media (max-width:899px){.sth,.tbl .tr{grid-template-columns:minmax(0,1fr) repeat(3,minmax(44px,56px))}.sth .shb:nth-child(n+5),.tbl .tr .c:nth-child(n+5){display:none}.tbl.metrics .sth,.tbl.metrics .tr{grid-template-columns:minmax(0,1fr) repeat(4,minmax(40px,50px))}.tbl.metrics .sth .shb:nth-child(n+6),.tbl.metrics .tr .c:nth-child(n+6){display:none}}
+.chip.sm{padding:4px 9px;font-size:11.5px}
+.gcard{border:1px solid var(--rule);border-radius:16px;background:var(--surface);box-shadow:0 1px 2px rgba(11,34,101,.05);overflow:hidden;padding:0 14px 12px;transition:transform .18s cubic-bezier(.2,.8,.2,1),box-shadow .18s,border-color .18s}
+.gcard:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(11,34,101,.12)}
+.gcard.sel{border-color:var(--navy);box-shadow:0 0 0 2px var(--navy),0 10px 26px rgba(11,34,101,.12)}
+.dark .gcard.sel{border-color:#8FB1FF;box-shadow:0 0 0 2px #8FB1FF}
+.gband{display:flex;height:5px;margin:0 -14px 10px}
+.gband i{flex:1}
+.gtop{padding-top:2px}
+.gteam{gap:12px}
+.ch+.ggrid .gcard:first-child,.ch+.ggrid .gcard:nth-child(2){border-top:1px solid var(--rule)}
+@media (min-width:900px){.ggrid{grid-template-columns:1fr 1fr;gap:14px}.gcard{border-top:1px solid var(--rule)}}
 /* ---- Board v2, standings, trend, metrics ---- */
 .vg2{display:grid;grid-template-columns:1fr auto 1fr;gap:8px;align-items:center;padding:9px 16px;border-top:1px solid var(--rule)}
 .ch+.vg2,.hint+.vg2{border-top:none}
@@ -922,9 +954,9 @@ textarea.notes{min-height:120px;resize:vertical;line-height:1.5}
 .evbig{font-size:24px;font-weight:900}
 .evbig.up{color:var(--go)}.evbig.dn{color:var(--stop)}
 @media (max-width:899px){.shh,.shr{grid-template-columns:34px 1fr}.shh span:nth-child(n+3),.shr .cell:nth-child(n+3){grid-column:2}.shh span:nth-child(3),.shh span:nth-child(4){display:none}}
-.ggrid{display:grid;grid-template-columns:1fr;gap:0}
-.gcard{padding:12px 16px 12px;border-top:1px solid var(--rule)}
-.ch+.ggrid .gcard:first-child{border-top:none}
+.ggrid{display:grid;grid-template-columns:1fr;gap:12px;padding:4px 16px 12px}
+@media (min-width:900px){.ggrid{grid-template-columns:1fr 1fr;gap:14px}}
+
 .gtop{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--ink2);font-weight:600}
 .gtop .kick{letter-spacing:.06em;text-transform:uppercase}
 .gtop .tot{margin-left:auto;font-size:15px;font-weight:800;color:var(--ink)}
@@ -969,9 +1001,7 @@ textarea.notes{min-height:120px;resize:vertical;line-height:1.5}
 .betrow .res.W{background:var(--go-bg);color:var(--go)}.betrow .res.L{background:var(--stop-bg);color:var(--stop)}
 .clv{font-weight:800;font-size:12px}.clv.up{color:var(--go)}.clv.dn{color:var(--stop)}
 @media (min-width:900px){
-  .ggrid{grid-template-columns:1fr 1fr;gap:0 18px}
-  .gcard{border-top:1px solid var(--rule)}
-  .ch+.ggrid .gcard:nth-child(2){border-top:none}
+
   .bestgrid{grid-template-columns:repeat(3,1fr);gap:0 18px}
   .ch+.bestgrid .bb:nth-child(-n+3){border-top:none}
 }
@@ -1080,6 +1110,14 @@ textarea.notes{min-height:120px;resize:vertical;line-height:1.5}
 // =============================================================================
 // PRIMITIVES
 // =============================================================================
+function NflMark({ team, size, label }) {
+  const st = TEAM_STYLE[team] || { bg: "#5A657D", line: "#C9D0DF", text: "#FFFFFF" }; const sz = size || 34;
+  return <span className="nmark cond" style={{ width: sz, height: sz, fontSize: sz * 0.36 }} title={TEAM_NAMES[team] || team}><span className="bx" style={{ background: st.bg, color: st.text }}>{label || team}<i style={{ background: st.line }} /></span></span>;
+}
+function SortHead({ cols, sort, dir, onSort, first }) {
+  return (<div className="sth">{first && <span className="fst">{first}</span>}{cols.map(([k, l, title]) => <button key={k} className={"shb" + (sort === k ? " on" : "")} onClick={() => onSort(k)} title={title || l}>{l}<i>{sort === k ? (dir === "desc" ? "▼" : "▲") : ""}</i></button>)}</div>);
+}
+function useSort(initial, initialDir) { const [sort, setSortK] = useState(initial); const [dir, setDir] = useState(initialDir || "desc"); const onSort = (k) => { if (k === sort) setDir((d) => (d === "desc" ? "asc" : "desc")); else { setSortK(k); setDir("desc"); } }; return { sort, dir, onSort }; }
 function TeamMark({ team, size }) {
   const st = LEAGUE_STYLE[team] || { bg: "#5A657D", fg: "#fff", mono: (team || "?").slice(0, 3).toUpperCase() };
   const sz = size || 34;
@@ -1464,9 +1502,9 @@ function VegasCard({ week, vegas, busy, err, onPull, lineup, byId, apiBase }) {
         const kick = g.commence ? new Date(g.commence).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" }) : "";
         return (
           <div key={g.id} className={"vg2" + (done ? " done" : live ? " live" : "")}>
-            <div className="vgl"><span className="tm cond" style={{ color: TEAM_STYLE[g.away] ? TEAM_STYLE[g.away].bg : undefined }}>{g.away}</span><span className="sc cond">{sc && sc.as != null ? sc.as : <span className="proj">{g.impliedAway != null ? g.impliedAway : "–"}</span>}</span></div>
+            <div className="vgl"><NflMark team={g.away} size={30} /><span className="sc cond">{sc && sc.as != null ? sc.as : <span className="proj">{g.impliedAway != null ? g.impliedAway : "–"}</span>}</span></div>
             <div className="vgm">{live ? <span className="livep">{sc.detail || "Live"}</span> : done ? <span className="fin">Final</span> : <span className="kick">{kick}</span>}<span className="line">{fav ? `${fav} ${g.spreadHome < 0 ? g.spreadHome : -g.spreadHome}` : "PK"}, O/U {g.total != null ? g.total : "–"}</span>{res && <span className="restags">{res.over && <b className={res.over === "Over" ? "up" : res.over === "Under" ? "dn" : ""}>{res.over} {res.tot}</b>}{res.cover && <b className="cv">{res.cover === "push" ? "Push" : `${res.cover} covered`}</b>}</span>}{!sc && <span className="proj small">Vegas proj</span>}</div>
-            <div className="vgl r"><span className="sc cond">{sc && sc.hs != null ? sc.hs : <span className="proj">{g.impliedHome != null ? g.impliedHome : "–"}</span>}</span><span className="tm cond" style={{ color: TEAM_STYLE[g.home] ? TEAM_STYLE[g.home].bg : undefined }}>{g.home}</span></div>
+            <div className="vgl r"><span className="sc cond">{sc && sc.hs != null ? sc.hs : <span className="proj">{g.impliedHome != null ? g.impliedHome : "–"}</span>}</span><NflMark team={g.home} size={30} /></div>
           </div>); })}
       {fresh && <div className="btns"><button className="btn sm" onClick={() => setShowAll((v) => !v)}>{showAll ? "Just my games" : `All ${games.length} games`}</button><button className="btn sm" onClick={() => onPull(!fresh)} disabled={busy}>{busy ? "Pulling" : "Refresh lines"}</button></div>}
       {!fresh && <div className="btns"><button className="btn pri sm" onClick={() => onPull(true)} disabled={busy}>{busy ? "Pulling" : "Pull this week's lines"}</button></div>}
@@ -1598,7 +1636,7 @@ function PlayerSheet({ p, mine, ownerName, week, irCount, watched, onStatus, onN
             <div className="phn"><div className="pbig cond">{bd.parts.length ? fmt1(bd.v) : hasProj(p) ? fmt1(pw(p)) : "n/a"}</div><div className="lab">{bd.parts.length ? `This week, ${m.bye ? "bye" : m.text}` : "Per week, rest of season"}</div></div>
             {hasProj(p) && bd.parts.length > 0 && <div className="phn r"><div className="pmid cond">{fmt1(pw(p))}</div><div className="lab">Per week, rest of season</div></div>}
           </div>
-          {b && <div className="pbio">{b.num && <span>#{b.num}</span>}{b.h && <span>{b.h}</span>}{b.w && <span>{b.w} lb</span>}{b.age != null && <span>{b.age} yrs</span>}{b.exp != null && <span>{b.exp === 0 ? "rookie" : `${b.exp} yr${b.exp > 1 ? "s" : ""} pro`}</span>}{b.col && <span>{b.col}</span>}{b.dc && <span>depth {b.dc}{h && h.sl && h.sl.dco ? h.sl.dco : ""}</span>}</div>}
+          {b && <div className="pbio"><span className="tmwrap"><NflMark team={p.t} size={20} />{TEAM_NAMES[p.t] || p.t}</span>{b.num && <span>#{b.num}</span>}{b.h && <span>{b.h}</span>}{b.w && <span>{b.w} lb</span>}{b.age != null && <span>{b.age} yrs</span>}{b.exp != null && <span>{b.exp === 0 ? "rookie" : `${b.exp} yr${b.exp > 1 ? "s" : ""} pro`}</span>}{b.col && <span>{b.col}</span>}{b.dc && <span>depth {b.dc}{h && h.sl && h.sl.dco ? h.sl.dco : ""}</span>}</div>}
           {(() => { const sl = h && h.sl, of = h && h.of; const line = sl && (sl.inj || sl.part || sl.prac) ? <><b>{sl.inj || "On the report"}</b>{sl.part ? `, ${sl.part.toLowerCase()}` : ""}{sl.prac ? `. Practice: ${sl.prac.toLowerCase()}` : ""}{sl.note ? `. ${sl.note}` : ""}</> : of && (of.status || of.injury) ? <><b>{of.status || "On the report"}</b>{of.injury ? `, ${of.injury.toLowerCase()}` : ""}{of.practice ? `. ${of.practice.replace("Participation in Practice", "practice").replace("In Practice", "practice")}` : ""}</> : sl && sl.st && !/^Active/i.test(sl.st) ? <b>{sl.st}</b> : es !== "ok" ? <b>{STATUS[es].label}{p.status && p.status !== "ok" ? " (set by you)" : ""}</b> : null; if (!line) return null; return <div className={"prep " + (es === "o" ? "o" : es === "d" ? "d" : es === "q" ? "q" : "ok")}>{line}{HEALTH && HEALTH.at ? <small>{sl ? "Sleeper" : "official report"}, synced {new Date(HEALTH.at).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" })}</small> : null}</div>; })()}
           {h && (h.own || h.add != null || h.drop != null) && <div className="pown">{h.own && <span><b className="cond">{h.own.pct}%</b><small>rostered (ESPN)</small></span>}{h.own && h.own.started != null && <span><b className="cond">{h.own.started}%</b><small>started</small></span>}{h.own && h.own.chg != null && h.own.chg !== 0 && <span><b className={"cond " + (h.own.chg > 0 ? "up" : "dn")}>{signed(h.own.chg)}</b><small>this week</small></span>}{h.add != null && <span><b className="cond up">+{h.add.toLocaleString()}</b><small>Sleeper adds, 24h</small></span>}{h.drop != null && <span><b className="cond dn">{h.drop.toLocaleString()}</b><small>drops, 24h</small></span>}</div>}
           {bd.parts.length > 0 && (
@@ -1666,17 +1704,17 @@ function AddSheet({ pick, active, week, owner, limit, onAdd, onClose }) {
 // TEAM
 // =============================================================================
 function MetricsTable({ players, week, onPlayer }) {
-  const [sort, setSort] = useState("fp");
+  const { sort, dir, onSort } = useSort("fp", "desc");
   const have = USAGE && USAGE.weeks && USAGE.weeks.length;
-  const rows = useMemo(() => players.filter((p) => p.p !== "DEF" && p.p !== "K").map((p) => { const u = usageOf(p); const ws = have ? USAGE.weeks.filter((w) => u && u.wk[w]).slice(-3) : []; const avg = (k) => { const v = ws.map((w) => u.wk[w][k]).filter((x) => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; }; return { p, n: ws.length, snap: avg("snap"), ts: avg("ts"), wopr: avg("wopr"), epa: avg("epa"), fp: avg("fp"), tgt: avg("tgt"), car: avg("car"), proj: pw(p) }; }).sort((a, b) => ((b[sort] == null ? -99 : b[sort]) - (a[sort] == null ? -99 : a[sort]))), [players, sort, USAGE && USAGE.at]);
-  const cols = [["fp", "Pts/g"], ["snap", "Snap%"], ["tgt", "Tgt/g"], ["ts", "Tgt%"], ["wopr", "WOPR"], ["epa", "EPA/g"], ["car", "Car/g"], ["proj", "Proj"]];
+  const rows = useMemo(() => { const sg = dir === "desc" ? -1 : 1; return players.filter((p) => p.p !== "DEF" && p.p !== "K").map((p) => { const u = usageOf(p); const ws = have ? USAGE.weeks.filter((w) => u && u.wk[w]).slice(-3) : []; const avg = (k) => { const v = ws.map((w) => u.wk[w][k]).filter((x) => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; }; return { p, n: ws.length, snap: avg("snap"), ts: avg("ts"), wopr: avg("wopr"), epa: avg("epa"), fp: avg("fp"), tgt: avg("tgt"), car: avg("car"), proj: pw(p), name: p.n }; }).sort((a, b) => { const x = a[sort], y = b[sort]; if (typeof x === "string") return sg * x.localeCompare(y); return sg * ((x == null ? -1e9 : x) - (y == null ? -1e9 : y)); }); }, [players, sort, dir, USAGE && USAGE.at]);
+  const cols = [["fp", "Pts", "Actual points per game, last 3"], ["snap", "Snap", "Snap share"], ["tgt", "Tgt", "Targets per game"], ["ts", "Tgt%", "Target share"], ["wopr", "WOPR", "Weighted opportunity"], ["epa", "EPA", "Expected points added per game"], ["car", "Car", "Carries per game"], ["proj", "Proj", "Our projection per week"]];
   return (
     <section className="card"><div className="ch"><h2 className="cond">Metrics</h2><span className="aux">{have ? `last 3 games, ${USAGE.season}` : "no games played yet"}</span></div>
       {!have && <div className="empty">Usage and efficiency numbers fill in after Week 1: snap share, targets and target share, WOPR (weighted opportunity), EPA per game, and actual points per game next to the projection. Numbers come from nflverse play-by-play.</div>}
-      {have && <><div className="cb" style={{ paddingTop: 2, paddingBottom: 4 }}><div className="chips">{cols.map(([k, l]) => <button key={k} className={"chip" + (sort === k ? " on" : "")} onClick={() => setSort(k)}>{l}</button>)}</div></div>
-        <div className="mth"><span>Player</span>{cols.map(([k, l]) => <span key={k}>{l}</span>)}</div>
-        {rows.map((r) => <div key={r.p.id} className="mtr"><button className="rowhit rowbtn" onClick={() => onPlayer(r.p.id)}><Badge p={r.p} /><span><span className="pname"><span className="t">{r.p.n}</span></span><span className="psub">{r.p.t}{r.n ? `, ${r.n} game${r.n > 1 ? "s" : ""}` : ", no games"}</span></span></button>{cols.map(([k]) => <span key={k} className={"cond" + (k === "fp" ? " b" : "")}>{r[k] == null ? "–" : k === "snap" || k === "ts" ? Math.round(r[k]) + "%" : k === "wopr" ? r[k].toFixed(2) : fmt1(r[k])}</span>)}</div>)}
-        <div className="hint">WOPR is 1.5 × target share plus 0.7 × air-yards share; above 0.6 is elite usage. EPA is expected points added by his plays. Sort by any column.</div></>}
+      {have && <div className="tbl metrics"><SortHead first="Player" cols={cols} sort={sort} dir={dir} onSort={onSort} />
+        {rows.map((r, i) => <div key={r.p.id} className="tr in" style={{ animationDelay: `${Math.min(i, 10) * 18}ms` }}><button className="rowhit rowbtn" onClick={() => onPlayer(r.p.id)}><Badge p={r.p} /><span className="ptxt"><span className="pname"><span className="t">{r.p.n}</span></span><span className="psub">{r.p.t}{r.n ? `, ${r.n} game${r.n > 1 ? "s" : ""}` : ", no games"}</span></span></button>{cols.map(([k]) => <span key={k} className={"c cond" + (sort === k ? " on" : "")}>{r[k] == null ? "–" : k === "snap" || k === "ts" ? Math.round(r[k]) + "%" : k === "wopr" ? r[k].toFixed(2) : fmt1(r[k])}</span>)}</div>)}
+      </div>}
+      {have && <div className="hint">Tap a column to sort. WOPR is 1.5 × target share plus 0.7 × air-yards share; above 0.6 is elite usage. EPA is expected points added by his plays.</div>}
     </section>
   );
 }
@@ -1833,20 +1871,25 @@ function MarketView({ week, freeAgents, upgrades, worstAt, watch, onWatch, onAdd
   );
 }
 function TrendTable({ freeAgents, onPlayer, onWatch, watch }) {
-  const [sort, setSort] = useState("add"); const [faOnly, setFaOnly] = useState(true);
-  const rows = useMemo(() => { const src = faOnly ? freeAgents : POOL; return src.map((p) => { const k = hkey(p); const own = HEALTH.own ? HEALTH.own[k] : null; return { p, add: HEALTH.trend.add ? HEALTH.trend.add[k] || 0 : 0, drop: HEALTH.trend.drop ? HEALTH.trend.drop[k] || 0 : 0, pct: own ? own.pct : null, chg: own ? own.chg : null, st: own ? own.started : null, pw: pw(p) }; }).filter((r) => r.add > 0 || r.drop > 0 || (r.chg != null && Math.abs(r.chg) >= 1)).sort((a, b) => sort === "add" ? b.add - a.add : sort === "drop" ? b.drop - a.drop : sort === "pct" ? (b.pct || 0) - (a.pct || 0) : sort === "chg" ? (b.chg || 0) - (a.chg || 0) : b.pw - a.pw).slice(0, 30); }, [freeAgents, faOnly, sort, HEALTH && HEALTH.at]);
+  const { sort, dir, onSort } = useSort("add", "desc"); const [faOnly, setFaOnly] = useState(true);
+  const rows = useMemo(() => { const src = faOnly ? freeAgents : POOL; const list = src.map((p) => { const k = hkey(p); const own = HEALTH.own ? HEALTH.own[k] : null; return { p, add: HEALTH.trend.add ? HEALTH.trend.add[k] || 0 : 0, drop: HEALTH.trend.drop ? HEALTH.trend.drop[k] || 0 : 0, pct: own ? own.pct : null, chg: own ? own.chg : null, st: own ? own.started : null, pw: hasProj(p) ? pw(p) : null, name: p.n }; }).filter((r) => r.add > 0 || r.drop > 0 || (r.chg != null && Math.abs(r.chg) >= 1)); const sg = dir === "desc" ? -1 : 1; return list.sort((a, b) => { const x = a[sort], y = b[sort]; if (typeof x === "string") return sg * x.localeCompare(y); return sg * ((x == null ? -1e9 : x) - (y == null ? -1e9 : y)); }).slice(0, 40); }, [freeAgents, faOnly, sort, dir, HEALTH && HEALTH.at]);
   const watched = new Set(watch.map((w) => w.id));
+  const cols = [["add", "Adds", "Sleeper adds, 24h"], ["drop", "Drops", "Sleeper drops, 24h"], ["pct", "Own%", "Percent rostered, ESPN"], ["chg", "Chg", "Rostered change this week"], ["pw", "Proj", "Our points per week"]];
   return (
-    <section className="card"><div className="ch"><h2 className="cond">Trending</h2><span className="aux">Sleeper adds and drops (24h), ESPN rostered</span></div>
-      <div className="cb" style={{ paddingTop: 2, paddingBottom: 6 }}><div className="chips">{[["add", "Most added"], ["drop", "Most dropped"], ["chg", "Biggest rostered change"], ["pct", "Most rostered"], ["pw", "Our projection"]].map(([k, l]) => <button key={k} className={"chip" + (sort === k ? " on" : "")} onClick={() => setSort(k)}>{l}</button>)}<button className={"chip hl" + (faOnly ? " on" : "")} onClick={() => setFaOnly((v) => !v)}>Free agents only</button></div></div>
-      <div className="trhead"><span>Player</span><span>Adds</span><span>Drops</span><span>Rostered</span><span>Chg</span><span>Proj</span></div>
-      {rows.length === 0 && <div className="empty">No trend data in this sync yet.</div>}
-      {rows.map((r) => (
-        <div key={r.p.id} className="trrow">
-          <button className="rowhit rowbtn" onClick={() => onPlayer(r.p.id)}><Badge p={r.p} /><span><span className="pname"><span className="t">{r.p.n}</span>{watched.has(r.p.id) && <span className="pill me">Watch</span>}</span><span className="psub">{r.p.t}, bye {r.p.b}</span></span></button>
-          <span className="cond up">{r.add ? `+${r.add.toLocaleString()}` : "–"}</span><span className="cond dn">{r.drop ? r.drop.toLocaleString() : "–"}</span><span className="cond">{r.pct != null ? `${r.pct}%` : "–"}</span><span className={"cond " + (r.chg > 0 ? "up" : r.chg < 0 ? "dn" : "")}>{r.chg != null ? signed(r.chg) : "–"}</span><span className="cond">{hasProj(r.p) ? fmt1(r.pw) : "–"}</span>
-        </div>))}
-      <div className="hint">Adds and drops are counts across Sleeper leagues in the last 24 hours. Rostered is ESPN's percentage. Crowd moves are a signal, not a projection; check the player card before you chase.</div>
+    <section className="card"><div className="ch"><h2 className="cond">Trending</h2><span className="aux"><button className={"chip sm" + (faOnly ? " on" : "")} onClick={() => setFaOnly((v) => !v)}>Free agents only</button></span></div>
+      <div className="tbl trend"><SortHead first="Player" cols={cols} sort={sort} dir={dir} onSort={onSort} />
+        {rows.length === 0 && <div className="empty">No trend data in this sync yet.</div>}
+        {rows.map((r, i) => (
+          <div key={r.p.id} className="tr in" style={{ animationDelay: `${Math.min(i, 10) * 18}ms` }}>
+            <button className="rowhit rowbtn" onClick={() => onPlayer(r.p.id)}><Badge p={r.p} /><span className="ptxt"><span className="pname"><span className="t">{r.p.n}</span>{watched.has(r.p.id) && <span className="pill me">Watch</span>}</span><span className="psub">{r.p.t}, bye {r.p.b}</span></span></button>
+            <span className={"c cond" + (sort === "add" ? " on" : "")} style={{ color: r.add ? "var(--go)" : undefined }}>{r.add ? `+${r.add.toLocaleString()}` : "–"}</span>
+            <span className={"c cond" + (sort === "drop" ? " on" : "")} style={{ color: r.drop ? "var(--stop)" : undefined }}>{r.drop ? r.drop.toLocaleString() : "–"}</span>
+            <span className={"c cond" + (sort === "pct" ? " on" : "")}>{r.pct != null ? `${r.pct}%` : "–"}</span>
+            <span className={"c cond" + (sort === "chg" ? " on" : "")} style={{ color: r.chg > 0 ? "var(--go)" : r.chg < 0 ? "var(--stop)" : undefined }}>{r.chg != null ? signed(r.chg) : "–"}</span>
+            <span className={"c cond" + (sort === "pw" ? " on" : "")}>{r.pw != null ? fmt1(r.pw) : "–"}</span>
+          </div>))}
+      </div>
+      <div className="hint">Tap a column to sort; tap again to flip. Adds and drops are counts across Sleeper leagues in the last 24 hours; Own% is ESPN's rostered percentage. Crowd moves are a signal, not a projection.</div>
     </section>
   );
 }
@@ -2256,12 +2299,13 @@ function GameCard({ g, week, roster, oppIds, oppName, onAddLeg, selected, onTogg
   const bestH = bestPrice(shop.map((r) => [r.book, r.shP])), bestA = bestPrice(shop.map((r) => [r.book, r.saP])), bestO = bestPrice(shop.map((r) => [r.book, r.oP])), bestU = bestPrice(shop.map((r) => [r.book, r.uP])), bestMH = bestPrice(shop.map((r) => [r.book, r.mlH])), bestMA = bestPrice(shop.map((r) => [r.book, r.mlA]));
   return (
     <div className={"gcard" + (selected ? " sel" : "") + (dim ? " dim" : "")}>
+      <div className="gband"><i style={{ background: TEAM_STYLE[g.away] ? TEAM_STYLE[g.away].bg : "#5A657D" }} /><i style={{ background: TEAM_STYLE[g.home] ? TEAM_STYLE[g.home].bg : "#5A657D" }} /></div>
       <button className="gsel" onClick={onToggle} aria-pressed={selected}>
         <div className="gtop"><span className="kick">{kick}{g.wx && g.wx.city ? `, ${g.wx.city}` : ""}</span>{hot && <span className="mx soft">Shootout</span>}{cold && <span className="mx tough">Slog</span>}{bestEv > 0.01 && <span className="mx soft">+EV line</span>}<span className="chk">{selected ? "✓" : ""}</span></div>
         <div className="gscore">
-          <div className={"gteam" + (pAway > pHome ? " w" : "")}><span className="ab cond" style={{ color: TEAM_STYLE[g.away] ? TEAM_STYLE[g.away].bg : undefined }}>{g.away}</span><span className="pts cond">{g.impliedAway != null ? g.impliedAway : "–"}</span></div>
+          <div className={"gteam" + (pAway > pHome ? " w" : "")}><NflMark team={g.away} size={40} /><span className="pts cond">{g.impliedAway != null ? g.impliedAway : "–"}</span></div>
           <div className="gmid"><span className="at">@</span></div>
-          <div className={"gteam h" + (pHome >= pAway ? " w" : "")}><span className="pts cond">{g.impliedHome != null ? g.impliedHome : "–"}</span><span className="ab cond" style={{ color: TEAM_STYLE[g.home] ? TEAM_STYLE[g.home].bg : undefined }}>{g.home}</span></div>
+          <div className={"gteam h" + (pHome >= pAway ? " w" : "")}><span className="pts cond">{g.impliedHome != null ? g.impliedHome : "–"}</span><NflMark team={g.home} size={40} /></div>
         </div>
         <div className="srcl">Vegas proj{g.anchor === "pinnacle" ? ", Pinnacle" : ""}</div>
         <div className="gline">{fav ? <b>{fav} by {Math.abs(g.spreadHome)}</b> : <b>Pick'em</b>}<span>O/U {tau != null ? tau : "–"}</span></div>
