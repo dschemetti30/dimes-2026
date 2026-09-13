@@ -120,6 +120,8 @@ const TRANSACTIONS = [
   { t: "Sep 8", team: ME, add: "chris-bell", drop: null },
 ];
 const IR_DEFAULT = ["treveyon-henderson", "jordyn-tyson"];
+// Your roster as of the Sept 9 Yahoo screenshot. "Restore" in Team puts it back exactly.
+const KNOWN_ROSTER = [["josh-allen", "ok"], ["rico-dowdle", "ok"], ["chris-rodriguez-jr", "ok"], ["amon-ra-st-brown", "ok"], ["luther-burden-iii", "ok"], ["terrance-ferguson", "ok"], ["kc-concepcion", "ok"], ["devaughn-vele", "ok"], ["brock-bowers", "ok"], ["josh-jacobs", "ok"], ["najee-harris", "ok"], ["caleb-douglas", "ok"], ["chris-brooks", "ok"], ["george-holani", "ok"], ["chris-bell", "ok"], ["seahawks-def", "ok"], ["treveyon-henderson", "ir"], ["jordyn-tyson", "ir"]];
 const txKey = (t, act, id, team) => `${t}|${act}|${id}|${team}`;
 
 // =============================================================================
@@ -255,7 +257,7 @@ function freshState() {
   const base = { v: 3, roster: TEAMS_INIT[ME].r.map((id) => ({ ...POOL_BY_ID[id], status: "ok", note: "", via: "Draft" })), teams, lineups: {}, results: {}, watch: [], log: [{ t: "Sep 5", text: "Drafted 16 players from the 9 seat." }], notes: "", chat: [], settings: { theme: "auto", rosterLimit: 16, playoffTeams: 6, bankroll: 500, books: ["FD", "MGM"], modelW: 0.35 }, txSeen: [], scores: {}, bets: [], slip: [], checklist: {}, limitSeeded: true };
   return applyTransactions(base);
 }
-const SYNC_KEYS = ["roster", "teams", "lineups", "scores", "watch", "log", "notes", "chat", "bets", "slip", "checklist", "txSeen", "vegasHist", "settings", "weeklyUser", "irSeeded", "limitSeeded", "actuals", "gpUser", "teamLineups", "projSnap", "push", "pffUser"];
+const SYNC_KEYS = ["roster", "teams", "lineups", "scores", "watch", "log", "notes", "chat", "bets", "slip", "checklist", "txSeen", "vegasHist", "settings", "weeklyUser", "irSeeded", "limitSeeded", "actuals", "gpUser", "teamLineups", "projSnap", "push", "pffUser", "history"];
 const pickSync = (s) => { const o = {}; SYNC_KEYS.forEach((k) => { if (s[k] !== undefined) o[k] = s[k]; }); if (o.settings) { o.settings = { ...o.settings }; delete o.settings.pin; } return o; };
 function migrate(s) {
   const fresh = freshState();
@@ -853,6 +855,7 @@ textarea.notes{min-height:120px;resize:vertical;line-height:1.5}
 .tmark.logo img{width:88%;height:auto;display:block}
 .strow .nm .t{display:flex;align-items:center}
 .mu2 .side .tm{display:inline-flex;align-items:center}
+.log>div .btn{flex:none}
 .dpill{font-size:9.5px;font-weight:800;letter-spacing:.06em;padding:1px 5px;border-radius:4px;background:var(--surface3);color:var(--ink2)}
 .dpill.s{background:var(--go-bg);color:var(--go)}
 .dpill.f{background:var(--warn-bg);color:var(--warn)}
@@ -1380,7 +1383,10 @@ export default function App() {
   const update = useCallback((fn) => setState((s) => { const n = fn({ ...s }); if (n === s) return s; const changed = SYNC_KEYS.some((k) => n[k] !== s[k]); return changed ? { ...n, updatedAt: Date.now() } : n; }), []);
   const addLog = (s, text) => ({ ...s, log: [{ t: today(), text }, ...s.log].slice(0, 100) });
   const showToast = (text, undoable) => { if (toastTimer.current) clearTimeout(toastTimer.current); setToast({ text, undoable }); toastTimer.current = setTimeout(() => setToast(null), 6000); };
-  const undoable = (fn, text) => { undoRef.current = state; update(fn); showToast(text, true); };
+  const snapOf = (s, label) => ({ at: Date.now(), label, roster: s.roster, teams: s.teams, lineups: s.lineups, week });
+  const undoable = (fn, text) => { undoRef.current = state; update((s) => { const ns = fn(s); const same = ns.roster === s.roster && ns.teams === s.teams && ns.lineups === s.lineups; return same ? ns : { ...ns, history: [snapOf(s, text), ...(s.history || [])].slice(0, 12) }; }); showToast(text, true); };
+  const restoreSnap = (i) => update((s) => { const h = (s.history || [])[i]; if (!h) return s; return addLog({ ...s, roster: h.roster, teams: h.teams, lineups: h.lineups, history: [snapOf(s, "Before restore"), ...(s.history || [])].slice(0, 12) }, `Restored rosters to before "${h.label}".`); });
+  const restoreKnown = () => update((s) => { const keep = Object.fromEntries(s.roster.map((p) => [p.id, p])); const roster = KNOWN_ROSTER.map(([id, st]) => ({ ...(POOL_BY_ID[id] || { id, n: id }), ...(keep[id] ? { note: keep[id].note, via: keep[id].via } : { note: "", via: "Yahoo" }), status: st })); return addLog({ ...s, roster, history: [snapOf(s, "Before restoring the Sept 9 roster"), ...(s.history || [])].slice(0, 12) }, "Roster restored to the Sept 9 Yahoo snapshot."); });
   const undo = () => { if (undoRef.current) { const prev = undoRef.current; update(() => prev); undoRef.current = null; } setToast(null); };
 
   // ---- derived ---------------------------------------------------------------
@@ -1606,7 +1612,7 @@ export default function App() {
         {tab === "home" && <HomeView week={week} actions={actions} lineup={lineup} isSaved={isSaved} byId={byId} bench={bench} irList={irList} myTotal={myTotal} myLive={myLive} onFromIR={fromIR} opp={opp} oppName={oppName} res={resThis} vegas={state.vegas} vegasBusy={vegasBusy} vegasErr={vegasErr} onVegas={pullVegas} apiBase={apiBase}
           onResult={(f, v) => setResult(week, f, v)} onSlot={(k) => setSheet({ type: "slot", slot: k })} onAuto={() => { autoFill(); showToast(`Week ${week} set to projected best.`); }} onResetAuto={resetAuto} onPlayer={openPlayer}
           onCoach={() => askCoach(`Set my best Week ${week} lineup vs ${oppName}. Check injury news first.`)} onTeam={() => oppIds && setSheet({ type: "team", team: oppName })} checklist={(state.checklist || {})[week] || {}} onCheck={(id) => update((s) => { const cl = { ...(s.checklist || {}) }; const w = { ...(cl[week] || {}) }; w[id] = !w[id]; cl[week] = w; return { ...s, checklist: cl }; })} scores={state.scores || {}} onImport={() => setSheet({ type: "import" })} onSources={() => setSheet({ type: "sources" })} />}
-        {tab === "team" && <TeamView roster={roster} active={active} irList={irList} week={week} myRank={myRank} rec={rec} results={results} notes={state.notes} limit={ROSTER_LIMIT} onPlayer={openPlayer} onNotes={setNotes} owner={owner} oppName={oppName} onFromIR={fromIR} />}
+        {tab === "team" && <TeamView roster={roster} active={active} irList={irList} week={week} myRank={myRank} rec={rec} results={results} notes={state.notes} limit={ROSTER_LIMIT} onPlayer={openPlayer} onNotes={setNotes} owner={owner} oppName={oppName} onFromIR={fromIR} history={state.history || []} onRestore={restoreSnap} onRestoreKnown={restoreKnown} onImport={() => setSheet({ type: "import" })} />}
         {tab === "market" && <MarketView active={active} irList={irList} week={week} freeAgents={freeAgents} upgrades={upgrades} worstAt={worstAt} watch={state.watch} onWatch={toggleWatch} onAdd={(pl) => setSheet({ type: "add", pick: pl })} onPlayer={openPlayer} power={power} onTeam={(t) => setSheet({ type: "team", team: t })} log={state.log} onImport={() => setSheet({ type: "import" })} onLogOne={() => setSheet({ type: "add" })} />}
         {tab === "league" && <LeagueView week={week} power={power} standings={standings} sim={sim} scores={state.scores || {}} owner={owner} playoffTeams={settings.playoffTeams || 6} onTeam={(t) => setSheet({ type: "team", team: t })} onPlayer={openPlayer} onScores={() => setSheet({ type: "scores" })} myLineup={lineup} onBox={(a, b) => setSheet({ type: "box", a, b })} />}
         {tab === "rankings" && <RankingsView week={week} owner={owner} watch={state.watch} onWatch={toggleWatch} onPlayer={openPlayer} />}
@@ -1815,6 +1821,7 @@ function CompareSheet({ lineup, autoL, byId, week, myTotal, autoTotal, onApply, 
 // PLAYER SHEET (mine, free agent, or someone else's)
 // =============================================================================
 function PlayerSheet({ p, mine, ownerName, week, irCount, watched, onStatus, onNote, onDrop, onAdd, onWatch, onTrade, onAsk, onClose, lineup, byId, onMove, onSwap, onIR, onFromIR }) {
+  const [confirmDrop, setConfirmDrop] = useState(false);
   if (!p) return null;
   const next = [week, week + 1, week + 2].filter((w) => w <= 18);
   const news = newsFor(p); const flags = (p.fl || "").split("").filter((f) => FLAG_TEXT[f]);
@@ -1867,7 +1874,9 @@ function PlayerSheet({ p, mine, ownerName, week, irCount, watched, onStatus, onN
       {mine && <div className="field"><label>Note</label><input value={p.note || ""} onChange={(e) => onNote(e.target.value)} placeholder="Hamstring, limited Wed. Snap share up. Trade bait." /></div>}
       {news.length > 0 && <><div className="ssec"><span>Fantasy Index notes, Sept 7</span></div><div className="card">{news.map((n, i) => <div key={i} className="nitem"><p>{n.x}</p></div>)}</div></>}
       <div className="btns">
-        {isFA && <button className={"btn" + (watched ? " pri" : "")} onClick={onWatch}>{watched ? "On watchlist" : "Watch"}</button>}
+        {isFA && <button className="btn pri" onClick={onAdd}>Add to my roster</button>}
+        {isFA && <button className={"btn" + (watched ? " hl" : "")} onClick={onWatch}>{watched ? "On watchlist" : "Watch"}</button>}
+        {mine && (!confirmDrop ? <button className="btn danger" onClick={() => setConfirmDrop(true)}>Drop</button> : <><button className="btn danger" onClick={onDrop}>Yes, drop {lastName(p.n)}</button><button className="btn" onClick={() => setConfirmDrop(false)}>Keep</button></>)}
         {other && <button className="btn pri" onClick={onTrade}>Trade for him</button>}
         <button className="btn" onClick={() => onAsk(`Latest on ${p.n} (${p.p}, ${p.t})?${mine ? ` Should I start him in Week ${week}?` : isFA ? " Worth a waiver claim, and who would I drop?" : ` What would it take to get him from ${ownerName}?`}`)}>Ask Coach</button>
 
@@ -1968,7 +1977,7 @@ function NewsCenter({ week, roster, owner, oppName, onPlayer }) {
     </section>
   );
 }
-function TeamView({ roster, active, irList, week, myRank, rec, results, notes, limit, onPlayer, onNotes, owner, oppName, onFromIR }) {
+function TeamView({ roster, active, irList, week, myRank, rec, results, notes, limit, onPlayer, onNotes, owner, oppName, onFromIR, history, onRestore, onRestoreKnown, onImport }) {
   const [openNews, setOpenNews] = useState({});
   const [sec, setSecRaw] = useState("roster"); const setSec = (k) => { setSecRaw(k); if (typeof window !== "undefined") setTimeout(() => window.scrollTo(0, 0), 0); };
   const counts = {}; active.forEach((p) => { counts[p.p] = (counts[p.p] || 0) + 1; });
@@ -1985,6 +1994,11 @@ function TeamView({ roster, active, irList, week, myRank, rec, results, notes, l
           <div className="stats" style={{ gridTemplateColumns: "repeat(6,1fr)", paddingTop: 2, paddingBottom: 8 }}>{POS_LIST.map((g) => <div key={g} className="stat" style={{ padding: "9px 2px 7px" }}><div className="v cond">{counts[g] || 0}</div><div className="k">{g}</div></div>)}</div>
           {myRank && <div className="hint" style={{ paddingTop: 0 }}>Best lineup projects {fmt1(myRank.total)} per week, #{myRank.rank} of 14.{HEALTH && HEALTH.at ? ` Injury designations synced from the official report ${new Date(HEALTH.at).toLocaleString("en-US", { weekday: "short", hour: "numeric" })}.` : " Injury sync needs the web version or the lines server."}</div>}
 
+        </section>
+        <section className="card"><div className="ch"><h2 className="cond">Recent changes</h2><span className="aux">{(history || []).length ? `${history.length} saved` : "nothing yet"}</span></div>
+          {(history || []).slice(0, 6).map((h, i) => <div key={h.at} className="log"><div><span className="t">{new Date(h.at).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" })}</span><span>{h.label}</span><button className="btn sm" style={{ marginLeft: "auto" }} onClick={() => onRestore(i)}>Undo to here</button></div></div>)}
+          <div className="btns" style={{ paddingTop: 6 }}><button className="btn" onClick={onRestoreKnown}>Restore Sept 9 Yahoo roster</button><button className="btn" onClick={onImport}>Import from Yahoo</button></div>
+          <div className="hint">Every add, drop, trade, import and restore saves a snapshot first. "Undo to here" puts rosters and lineups back to just before that change. Restore Sept 9 puts your roster back to the last screenshot exactly: 16 active plus Henderson and Tyson on IR.</div>
         </section>
         <div className="cols"><div className="col">
         {["QB", "RB", "TE"].map((g) => { const list = active.filter((p) => p.p === g); if (!list.length) return null; return (
@@ -2851,7 +2865,7 @@ function EdgeView({ week, vegas, vegasBusy, vegasErr, onVegas, apiBase, owner, o
 // IMPORT (paste from Yahoo transactions)
 // =============================================================================
 function ImportSheet({ seen, onApply, onClose, apiBase, week, roster, teams, onScores, onLineup, onRoster, onMyRoster, onPff }) {
-  const [kind, setKind] = useState("myroster"); const [txt, setTxt] = useState(""); const [imgs, setImgs] = useState([]); const img = imgs[0] || null; const [busy, setBusy] = useState(false); const [err, setErr] = useState(""); const [moves, setMoves] = useState(null); const [parsed, setParsed] = useState(null);
+  const [kind, setKind] = useState("myroster"); const [txt, setTxt] = useState(""); const [imgs, setImgs] = useState([]); const img = imgs[0] || null; const [sure, setSure] = useState(false); const [busy, setBusy] = useState(false); const [err, setErr] = useState(""); const [moves, setMoves] = useState(null); const [parsed, setParsed] = useState(null);
   const KINDS = [["myroster", "My roster"], ["transactions", "Transactions"], ["scores", "Scores"], ["roster", "Other team"], ["pffgrades", "PFF grades"]];
   const pickImages = (files) => { Array.from(files || []).slice(0, 4).forEach((f) => { const rd = new FileReader(); rd.onload = () => { const image = new Image(); image.onload = () => { const max = 1800; const sc = Math.min(1, max / Math.max(image.width, image.height)); const c = document.createElement("canvas"); c.width = Math.round(image.width * sc); c.height = Math.round(image.height * sc); c.getContext("2d").drawImage(image, 0, 0, c.width, c.height); setImgs((arr) => [...arr, c.toDataURL("image/jpeg", 0.85)].slice(0, 4)); }; image.src = rd.result; }; rd.readAsDataURL(f); }); };
   const read = async () => {
@@ -2906,11 +2920,12 @@ function ImportSheet({ seen, onApply, onClose, apiBase, week, roster, teams, onS
       </>); })()}
       {parsed && kind === "myroster" && (() => { const items = (parsed.players || []).map((x) => ({ ...x, p: matchName(x) })); const ids = new Set(items.map((x) => x.p.id)); const adds = items.filter((x) => !roster.find((r) => r.id === x.p.id)); const drops = roster.filter((r) => !ids.has(r.id)); const ir = items.filter((x) => String(x.slot || "").toUpperCase() === "IR" || /^IR/i.test(String(x.status || ""))).map((x) => x.p.id); const L = {}; const cnt = {}; items.forEach((x) => { let slot = String(x.slot || "").toUpperCase().replace("W/R/T", "FLEX").replace("D/ST", "DEF"); if (slot === "BN" || slot === "IR" || !slot) return; if (slot === "RB" || slot === "WR" || slot === "FLEX") { cnt[slot] = (cnt[slot] || 0) + 1; slot = slot + cnt[slot]; } if (SLOTS.find((s0) => s0.k === slot)) L[slot] = x.p.id; }); return (<>
         <div className="ssec"><span>{items.length} players read</span><span>{adds.length} to add, {drops.length} to remove</span></div>
+        {(items.length < 10 || drops.length > 3) && <div className="prep d"><b>{items.length < 10 ? `Only ${items.length} players were read.` : `This would remove ${drops.length} players.`}</b> That usually means a partial screenshot. Add the rest of the page (up to four shots) or go back. Applying anyway is allowed, and it is undoable from Team, Recent changes.<label style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 8, fontSize: 13 }}><input type="checkbox" checked={!!sure} onChange={(e) => setSure(e.target.checked)} /> I checked the list; apply it.</label></div>}
         {adds.length > 0 && <div className="card"><div className="ch"><h2 className="cond" style={{ fontSize: 14 }}>Adding</h2></div>{adds.map((x) => <PRow key={x.p.id} p={x.p} week={week} sub={x.p.custom ? "new to the app" : undefined} right={<Val p={x.p} label="per wk" />} />)}</div>}
         {drops.length > 0 && <div className="card"><div className="ch"><h2 className="cond" style={{ fontSize: 14 }}>Removing</h2></div>{drops.map((p) => <PRow key={p.id} p={p} week={week} right={<span className="pill d">Gone</span>} />)}</div>}
         {adds.length === 0 && drops.length === 0 && <div className="hint">Roster already matches. This will still set the lineup and IR.</div>}
         <div className="hint">Lineup read: {Object.keys(L).length} of 10 slots. IR: {ir.length ? ir.map((id) => (POOL_BY_ID[id] || {}).n || id).join(", ") : "none"}.</div>
-        <div className="btns"><button className="btn pri" onClick={() => { onMyRoster(items.map((x) => x.p), L, ir, adds.map((x) => x.p), drops); onClose(); }}>Apply to my roster</button><button className="btn" onClick={() => setParsed(null)}>Back</button></div>
+        <div className="btns"><button className="btn pri" disabled={(items.length < 10 || drops.length > 3) && !sure} onClick={() => { onMyRoster(items.map((x) => x.p), L, ir, adds.map((x) => x.p), drops); onClose(); }}>Apply to my roster</button><button className="btn" onClick={() => setParsed(null)}>Back</button></div>
       </>); })()}
       {parsed && kind === "pffgrades" && (() => { const arr = Array.isArray(parsed) ? parsed : [parsed]; const ok = arr.filter((x) => x && x.team && x.players); return (<>
         <div className="ssec"><span>{ok.length} report{ok.length === 1 ? "" : "s"} read</span></div>
@@ -2919,7 +2934,7 @@ function ImportSheet({ seen, onApply, onClose, apiBase, week, roster, teams, onS
       </>); })()}
       {parsed && kind === "roster" && (() => { const players = (parsed.players || []).map(matchName); const L = {}; const cnt = {}; (parsed.players || []).forEach((x, i) => { let slot = String(x.slot || "").toUpperCase().replace("W/R/T", "FLEX").replace("D/ST", "DEF"); if (slot === "BN" || slot === "IR" || !slot) return; if (slot === "RB" || slot === "WR" || slot === "FLEX") { cnt[slot] = (cnt[slot] || 0) + 1; slot = slot + cnt[slot]; } if (SLOTS.find((s0) => s0.k === slot)) L[slot] = players[i].id; }); const [team, setTeam] = [parsed._team || (LEAGUE_TEAMS.find((t) => t.toLowerCase() === String(parsed.team || "").toLowerCase()) || ""), (t) => setParsed({ ...parsed, _team: t })]; return (<>
         <div className="ssec"><span>{players.length} players read</span></div>
-        <div className="field"><label>Which team is this?</label><select value={team} onChange={(e) => setTeam(e.target.value)}><option value="">Pick a team</option>{LEAGUE_TEAMS.map((t) => <option key={t} value={t}>{t}</option>)}</select></div>
+        <div className="field"><label>Which team is this?</label><select value={team} onChange={(e) => setTeam(e.target.value)}><option value="">Pick a team</option>{LEAGUE_TEAMS.filter((t) => t !== ME).map((t) => <option key={t} value={t}>{t}</option>)}</select></div>
         <div className="card">{players.map((p, i) => <PRow key={p.id + i} p={p} week={week} right={<Val p={p} label="per wk" />} />)}</div>
         <div className="btns"><button className="btn pri" disabled={!team} onClick={() => { onRoster(team, players, Object.keys(L).length >= 8 ? L : null); onClose(); }}>{Object.keys(L).length >= 8 ? `Save ${team || "team"}'s roster and lineup` : `Replace ${team || "team"}'s roster`}</button><button className="btn" onClick={() => setParsed(null)}>Back</button></div>
       </>); })()}
