@@ -198,8 +198,9 @@ function wkBreakdown(p, week) {
   return { v, parts };
 }
 function wkRange(p, week) { const mu = wkPts(p, week); if (mu <= 0) return { floor: 0, ceil: 0 }; const wk = weekly(p, week); if (wk && wk.fbg && wk.fbg[1] != null && wk.fbg[2] != null) { const sc = mu / Math.max(wk.fbg[0], 0.1); return { floor: Math.max(0, wk.fbg[1] * sc), ceil: wk.fbg[2] * sc }; } const sd = 0.45 * mu + 1.5; return { floor: Math.max(0, mu - 0.9 * sd), ceil: mu + 1.1 * sd }; }
-let LINEUP_METRIC = "mean";
-function wkMetric(p, week) { if (LINEUP_METRIC === "floor") return wkRange(p, week).floor; if (LINEUP_METRIC === "ceil") return wkRange(p, week).ceil; return wkPts(p, week); }
+let LINEUP_METRIC = "mean"; let LINEUP_CTX = null; // { qbTeams: Set, oppTeams: Set } for my lineup only
+function corrMult(p) { if (!LINEUP_CTX || LINEUP_METRIC === "mean" || !p || p.p === "DEF" || p.p === "K") return 1; let m = 1; const stack = p.p !== "QB" && LINEUP_CTX.qbTeams.has(p.t); const vsOpp = LINEUP_CTX.oppTeams.has(p.t); if (LINEUP_METRIC === "ceil") { if (stack) m *= 1.04; if (vsOpp) m *= 0.97; } else { if (stack) m *= 0.97; if (vsOpp) m *= 1.03; } return m; }
+function wkMetric(p, week) { const base = LINEUP_METRIC === "floor" ? wkRange(p, week).floor : LINEUP_METRIC === "ceil" ? wkRange(p, week).ceil : wkPts(p, week); return base * corrMult(p); }
 function wkPts(p, week) {
   if (!p) return 0; if (matchup(p.t, week).bye) return 0; const es = effStatus(p); if (es === "o" || es === "ir" || es === "d") return 0;
   return wkBreakdown(p, week).v;
@@ -290,7 +291,7 @@ function freshState() {
   const base = { v: 3, roster: TEAMS_INIT[ME].r.map((id) => ({ ...POOL_BY_ID[id], status: "ok", note: "", via: "Draft" })), teams, lineups: {}, results: {}, watch: [], log: [{ t: "Sep 5", text: "Drafted 16 players from the 9 seat." }], notes: "", chat: [], settings: { theme: "auto", rosterLimit: 16, playoffTeams: 6, bankroll: 500, books: ["FD", "MGM"], modelW: 0.35 }, txSeen: [], scores: {}, bets: [], slip: [], checklist: {}, limitSeeded: true, irSeeded: true };
   const out = applyTransactions(base); out.roster = out.roster.map((p) => (IR_DEFAULT.includes(p.id) ? { ...p, status: "ir" } : CEL_DEFAULT.includes(p.id) ? { ...p, status: "o", note: "Commissioner exempt list" } : p)); out.celSeeded = true; return out;
 }
-const SYNC_KEYS = ["roster", "teams", "lineups", "scores", "watch", "log", "notes", "chat", "bets", "slip", "checklist", "txSeen", "vegasHist", "settings", "weeklyUser", "irSeeded", "limitSeeded", "actuals", "gpUser", "teamLineups", "projSnap", "push", "pffUser", "history", "celSeeded"];
+const SYNC_KEYS = ["roster", "teams", "lineups", "scores", "watch", "log", "notes", "chat", "bets", "slip", "checklist", "txSeen", "vegasHist", "settings", "weeklyUser", "irSeeded", "limitSeeded", "actuals", "gpUser", "teamLineups", "projSnap", "push", "pffUser", "history", "celSeeded", "picksLog"];
 const pickSync = (s) => { const o = {}; SYNC_KEYS.forEach((k) => { if (s[k] !== undefined) o[k] = s[k]; }); if (o.settings) { o.settings = { ...o.settings }; delete o.settings.pin; } return o; };
 function migrate(s) {
   const fresh = freshState();
@@ -1444,6 +1445,75 @@ textarea.notes,input,select{font-size:13.5px;padding:9px 11px;border-radius:10px
   .board .tot{font-size:38px}
   .board .who{font-size:17px}
 }
+
+/* ===================== Polish pass 2: masthead, hierarchy, tags, sheets ===================== */
+.report{white-space:pre-wrap;font-family:var(--f);font-size:12.5px;line-height:1.5;background:var(--surface2);border-radius:12px;padding:12px 14px;margin:6px 4px 8px}
+.tgrade{font-size:22px;font-weight:900}
+.hlbox{margin:6px 4px 10px;border-radius:12px;overflow:hidden;background:var(--surface2)}
+.hlframe{position:relative;padding-top:56.25%}
+.hlframe iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
+.hllist{display:grid;gap:1px;background:var(--rule)}
+.hlrow{display:grid;grid-template-columns:96px 1fr;gap:10px;align-items:center;padding:8px 10px;background:var(--surface);color:inherit;text-decoration:none}
+.hlrow img{width:96px;height:54px;object-fit:cover;border-radius:6px}
+.hlrow b{display:block;font-size:12.5px;line-height:1.3;font-weight:600}.hlrow small{color:var(--ink2);font-size:11px}
+.mast .bar{padding:10px 14px 0}
+.mast .wm .logo{height:26px}
+.mast .wm .lg{font-size:9.5px;letter-spacing:.2em}
+.mast .rec{font-size:22px}
+.wkstrip{padding:8px 14px 6px;gap:6px}
+.wkc{width:30px;height:30px;font-size:12.5px}
+.wkline{padding:0 14px 8px;font-size:11.5px}
+.wkline b{font-size:11px;letter-spacing:.12em}
+.mast .oppn b{font-size:14px}
+.mx{border:1px solid currentColor;background:transparent!important;opacity:.85;font-weight:800}
+.mx.soft{color:var(--go)}.mx.tough{color:var(--stop)}
+.pill.own{background:var(--surface3);color:var(--ink2)}
+.card{box-shadow:0 1px 2px rgba(11,34,101,.05),0 0 0 1px rgba(11,34,101,.05);margin-bottom:12px}
+.dark .card{box-shadow:0 0 0 1px rgba(255,255,255,.06)}
+.prow{border-top-color:var(--rule)}
+.prow .pright{min-width:72px;justify-content:flex-end}
+.val{text-align:right}
+.nico{width:14px;height:14px}
+.nico svg{width:10px;height:10px}
+.sh{padding:12px 14px 8px}
+.sh h1{font-size:18px;font-weight:800}
+.sh .x{background:var(--surface3)}
+.field{padding:6px 4px}
+.field label{margin-bottom:5px}
+.seg{border-radius:10px}
+.act .go{font-size:11.5px;padding:5px 10px}
+.hint b{font-weight:700}
+.empty{padding:14px}
+.board .btns{padding-top:10px}
+.btn.ghost{font-size:12px}
+.stats{gap:6px}
+.tmark{box-shadow:inset 0 -1.5px 0 rgba(0,0,0,.22)}
+.tmark b{font-size:inherit}
+.strow .nm .t .tmark{margin-right:7px}
+.log>div{padding:5px 0}
+.ntag{font-size:9px;width:36px;padding:4px 0}
+.gcard{border-radius:14px}
+.gband{height:4px}
+.gteam .pts{letter-spacing:-.02em}
+.rgwrap{border-top:1px solid var(--rule)}
+.rgh>*{background:var(--surface2)}
+@media (max-width:899px){
+  .mast .bar{padding:8px 12px 0}
+  .mast .wm .logo{height:22px}
+  .wkc{width:28px;height:28px;font-size:12px}
+  .wkstrip{padding:6px 12px 4px}
+  .wkline{padding:0 12px 7px}
+  .val{min-width:40px}
+  .prow .pright{min-width:64px}
+  .rank .ch{flex-wrap:wrap}
+  .rank .ch .aux{flex:1 0 100%;text-align:left;margin-top:4px}
+  .rank .seg.sm{display:flex;width:100%}
+  .rank .seg.sm button{flex:1;text-align:center}
+  .nav button{font-size:10.5px;padding:6px 2px 4px}
+  .nav button svg{width:20px;height:20px}
+  .card{margin-bottom:10px}
+  .ch h2{font-size:11px}
+}
 `;
 
 // =============================================================================
@@ -1582,6 +1652,7 @@ export default function App() {
     timers.push(setTimeout(() => setSplash("out"), total)); timers.push(setTimeout(() => setSplash(null), total + 500));
     return () => timers.forEach(clearTimeout);
   }, []);
+  useEffect(() => { if (WEB && typeof navigator !== "undefined" && "serviceWorker" in navigator) { try { navigator.serviceWorker.register("/sw.js").catch(() => {}); } catch (e) { /* ignore */ } } }, []);
   useLayoutEffect(() => { if (typeof window === "undefined") return; try { if ("scrollRestoration" in window.history) window.history.scrollRestoration = "manual"; } catch (e) { /* ignore */ } const top = () => { window.scrollTo(0, 0); document.documentElement.scrollTop = 0; document.body.scrollTop = 0; }; top(); const raf = typeof window.requestAnimationFrame === "function" ? window.requestAnimationFrame.bind(window) : (f) => setTimeout(f, 16); raf(top); setTimeout(top, 60); }, [tab]);
 
   const [sysDark, setSysDark] = useState(() => typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
@@ -1661,16 +1732,16 @@ export default function App() {
   const standings = useMemo(() => standingsFrom(state ? state.scores || {} : {}), [state]);
   const owner = useMemo(() => { const o = {}; if (!state) return o; Object.keys(state.teams).forEach((t) => state.teams[t].forEach((id) => { o[id] = t; })); roster.forEach((p) => { o[p.id] = ME; }); return o; }, [state, roster]);
   const freeAgents = useMemo(() => POOL.filter((p) => !owner[p.id]).sort((a, b) => pw(b) - pw(a)), [owner]);
+  const oppName = MY_SCHEDULE[week] || "";
+  const oppIds = state && state.teams[oppName] ? state.teams[oppName] : null;
+  const autoL = useMemo(() => { const mode = settings.lineupMode || "auto"; LINEUP_METRIC = mode === "auto" ? (oppWpRef.current < 0.4 ? "ceil" : oppWpRef.current > 0.62 ? "floor" : "mean") : mode; const qbs = active.filter((p) => p.p === "QB" && wkPts(p, week) > 0).sort((a, b) => wkPts(b, week) - wkPts(a, week)); const oppPs = (oppIds || []).map((id) => POOL_BY_ID[id]).filter(Boolean); LINEUP_CTX = { qbTeams: new Set(qbs.slice(0, 1).map((q) => q.t)), oppTeams: new Set(oppPs.filter((p) => wkPts(p, week) >= 8).map((p) => p.t)) }; const L = bestLineup(active, week); LINEUP_METRIC = "mean"; LINEUP_CTX = null; return L; }, [active, week, settings.lineupMode, oppWpTick, oppIds]);
   const savedL = state ? sanitizeLineup(state.lineups[week], byId) : null;
   const oppWp0 = 0.5;
-  const autoL = useMemo(() => { const mode = settings.lineupMode || "auto"; LINEUP_METRIC = mode === "auto" ? (oppWpRef.current < 0.4 ? "ceil" : oppWpRef.current > 0.62 ? "floor" : "mean") : mode; const L = bestLineup(active, week); LINEUP_METRIC = "mean"; return L; }, [active, week, settings.lineupMode, oppWpTick]);
   const lineup = savedL || autoL; const isSaved = !!savedL;
   const myLive = (LIVE && LIVE.week === week) || (ACT && ACT[week]) ? liveTotal(lineup, byId, week) : null;
   const myTotal = myLive ? myLive.total : lineupTotal(lineup, byId, week), autoTotal = lineupTotal(autoL, byId, week);
   const starterIds = new Set(Object.values(lineup).filter(Boolean));
   const bench = active.filter((p) => !starterIds.has(p.id));
-  const oppName = MY_SCHEDULE[week] || "";
-  const oppIds = state && state.teams[oppName] ? state.teams[oppName] : null;
   const opp = useMemo(() => { if (!oppIds) return null; const players = oppIds.map((id) => POOL_BY_ID[id]).filter(Boolean); const b = Object.fromEntries(players.map((p) => [p.id, p])); const L = teamLineupFor(oppName, players, week).L; const lv = (LIVE && LIVE.week === week) || (ACT && ACT[week]) ? liveTotal(L, b, week) : null; return { players, byId: b, L, total: lv ? lv.total : lineupTotal(L, b, week), live: lv, onBye: players.filter((p) => matchup(p.t, week).bye) }; }, [oppIds, week, LIVE && LIVE.at, ACT && ACT[week], TLINE && TLINE[week]]);
   useEffect(() => { if (!opp) return; const wp = winProb(lineupTotal(lineup, byId, week), opp.total); const mode = wp < 0.4 ? "ceil" : wp > 0.62 ? "floor" : "mean"; const cur = oppWpRef.current < 0.4 ? "ceil" : oppWpRef.current > 0.62 ? "floor" : "mean"; oppWpRef.current = wp; if (mode !== cur) setOppWpTick((t) => t + 1); }, [opp && opp.total, week]);
   const power = useMemo(() => { if (!state) return []; return LEAGUE_TEAMS.map((t) => { const ids = t === ME ? active.map((p) => p.id) : state.teams[t]; const s = teamStrength(ids); return { team: t, ...s }; }).sort((a, b) => b.total - a.total).map((r, i) => ({ ...r, rank: i + 1 })); }, [state, active]);
@@ -1696,7 +1767,7 @@ export default function App() {
     });
     if (isSaved && autoTotal - myTotal >= 1) a.push({ lvl: "warn", text: `Projections like a different lineup by ${fmt1(autoTotal - myTotal)}`, sub: "Blend of Fantasy Index and Footballguys", go: "Compare", do: () => setSheet({ type: "compare" }) });
     if (DEPTH && DEPTH.teams) { const worries = []; SLOTS.forEach((s0) => { const p = lineup[s0.k] ? byId[lineup[s0.k]] : null; if (!p || p.p === "DEF" || p.p === "K") return; const d = depthOf(p); if (!d || d.missing) return; if (d.flag === "battle") worries.push(`${lastName(p.n)} is in an open battle at ${p.p}`); else if (d.order >= 3 || (d.order === 2 && p.p !== "WR")) worries.push(`${lastName(p.n)} is ${p.p}${d.order} behind ${d.ahead.join(", ")}`); }); const recent = (DEPTH.changes || []).filter((c) => Date.now() - (c.at || 0) < 3 * 86400e3 && active.some((p) => p.t === c.t && p.p === c.pos && normName(p.n) === normName(c.name))); if (worries.length || recent.length) a.push({ lvl: recent.some((c) => c.dir === "down") || worries.length ? "warn" : "info", text: recent.length ? recent[0].text : `Depth chart: ${worries[0]}`, sub: [...recent.slice(1).map((c) => c.text), ...worries.slice(recent.length ? 0 : 1)].slice(0, 2).join(" ") || `Two Deep, updated ${DEPTH.updated || "recently"}.`, go: "News", do: () => { setTab("team"); } }); }
-    if (opp) { const wp = winProb(lineupTotal(lineup, byId, week), opp.total); const mode = (settings.lineupMode || "auto") === "auto" ? (wp < 0.4 ? "ceil" : wp > 0.62 ? "floor" : "mean") : settings.lineupMode; if (mode !== "mean" && !isSaved) a.push({ lvl: "info", text: mode === "ceil" ? `Underdog at ${Math.round(wp * 100)}%: auto lineup favors ceiling` : `Favored at ${Math.round(wp * 100)}%: auto lineup favors floor`, sub: "Change the lean in Settings.", go: "Settings", do: () => setSheet({ type: "menu" }) }); }
+    if (opp) { const wp = winProb(lineupTotal(lineup, byId, week), opp.total); const mode = (settings.lineupMode || "auto") === "auto" ? (wp < 0.4 ? "ceil" : wp > 0.62 ? "floor" : "mean") : settings.lineupMode; if (mode !== "mean" && !isSaved) a.push({ lvl: "info", text: mode === "ceil" ? `Underdog at ${Math.round(wp * 100)}%: auto lineup favors ceiling` : `Favored at ${Math.round(wp * 100)}%: auto lineup favors floor`, sub: mode === "ceil" ? "Stacks with your QB get a small bump; players in your opponent's games get a small penalty. Change the lean in Settings." : "Players in your opponent's games get a small bump as a hedge; stacks a small penalty. Change the lean in Settings.", go: "Settings", do: () => setSheet({ type: "menu" }) }); }
     if (!isSaved && week >= currentWeek()) a.push({ lvl: "info", text: "Lineup is on auto", sub: `Projected best, ${fmt1(myTotal)} pts. Lock it in once you have read the news.`, go: "Lock in", do: () => { autoFill(); showToast(`Week ${week} lineup set.`); } });
     if (upgrades.length) a.push({ lvl: "info", text: `${upgrades[0].fa.n} is on the wire`, sub: `${upgrades[0].fa.p}, projects ${signed(upgrades[0].gain)} over ${upgrades[0].over ? lastName(upgrades[0].over.n) : "an empty slot"}`, go: "Look", do: () => setSheet({ type: "player", id: upgrades[0].fa.id }) });
     if (active.length > ROSTER_LIMIT) a.push({ lvl: "bad", text: `Roster over the limit (${active.length} of ${ROSTER_LIMIT})`, sub: "Yahoo will not let this stand", go: "Fix", do: () => setTab("team") });
@@ -1782,9 +1853,11 @@ export default function App() {
       update((s) => { const vg = { at: j.at || Date.now(), week, games: j.games || [], props: j.props || {}, credits: j.credits || null }; const bets = (s.bets || []).map((b) => { if (b.result || b.week !== week) return b; const cur = currentQuote(vg, b); return cur ? { ...b, close: cur, closeAt: vg.at } : b; });
         const snap = {}; Object.keys(vg.props).forEach((k) => { const pr = vg.props[k]; const px = pr.px || {}; snap[k] = { pass_yds: pr.pass_yds, pass_tds: pr.pass_tds, rush_yds: pr.rush_yds, rec_yds: pr.rec_yds, rec: pr.rec, atd: pr.atd, px: { pass_yds: px.pass_yds, pass_tds: px.pass_tds, rush_yds: px.rush_yds, rec_yds: px.rec_yds, rec: px.rec, atd: px.atd } }; });
         const gsnap = vg.games.map((g) => ({ home: g.home, away: g.away, total: g.total, spreadHome: g.spreadHome, winHome: g.winHome }));
+        const picksNow = (() => { try { const prevV = VEGAS; VEGAS = vg; const pr = priceProps(week, owner, settings.bankroll || 500); const gms = vg.games; const pk = picksFrom(pr, gms).map((e) => ({ key: e.key, id: e.p.id, n: e.p.n, mk: e.mk, field: e.field, side: e.side, line: e.line, price: e.price, pWin: e.pWin, fair: e.fair, ev: e.ev, tier: tierOf(e), at: vg.at })); VEGAS = prevV; return pk; } catch (e) { return []; } })();
+        const plog = { ...(s.picksLog || {}) }; plog[week] = picksNow;
         const hist = { ...(s.vegasHist || {}) }; const prev = hist[week]; hist[week] = { openAt: prev ? prev.openAt : vg.at, open: prev ? prev.open : snap, openGames: prev ? prev.openGames : gsnap, closeAt: vg.at, close: snap, closeGames: gsnap };
         const keys = Object.keys(hist).sort((a, b) => a - b); while (keys.length > 6) delete hist[keys.shift()];
-        return { ...s, vegas: vg, bets, vegasHist: hist }; });
+        return { ...s, vegas: vg, bets, vegasHist: hist, picksLog: plog }; });
       showToast(`Pulled ${(j.games || []).length} games and ${Object.keys(j.props || {}).length} players with props.${j.credits && j.credits.remaining ? ` ${j.credits.remaining} credits left this month.` : ""}`);
     } catch (e) {
       const msg = /Failed to fetch|NetworkError|blocked|CORS/i.test(e.message) ? (WEB ? "Could not reach the lines server. Check the connection and try again." : "This view cannot reach the lines server. Open the web version to pull Vegas lines.") : e.message;
@@ -1827,16 +1900,16 @@ export default function App() {
       <div className={"save" + (saveErr ? " err" : "")}>{saveMsg}{pin ? ` · ${syncMsg || "Sync on"}` : ""}</div>
 
       <main className="pg view" key={tab}>
-        {tab === "home" && <HomeView week={week} actions={actions} lineup={lineup} isSaved={isSaved} byId={byId} bench={bench} irList={irList} myTotal={myTotal} myLive={myLive} onFromIR={fromIR} opp={opp} oppName={oppName} res={resThis} vegas={state.vegas} vegasBusy={vegasBusy} vegasErr={vegasErr} onVegas={pullVegas} apiBase={apiBase}
+        {tab === "home" && <HomeView onReport={() => setSheet({ type: "report" })} week={week} actions={actions} lineup={lineup} isSaved={isSaved} byId={byId} bench={bench} irList={irList} myTotal={myTotal} myLive={myLive} onFromIR={fromIR} opp={opp} oppName={oppName} res={resThis} vegas={state.vegas} vegasBusy={vegasBusy} vegasErr={vegasErr} onVegas={pullVegas} apiBase={apiBase}
           onResult={(f, v) => setResult(week, f, v)} onSlot={(k) => setSheet({ type: "slot", slot: k })} onAuto={() => { autoFill(); showToast(`Week ${week} set to projected best.`); }} onResetAuto={resetAuto} onPlayer={openPlayer}
           onCoach={() => askCoach(`Set my best Week ${week} lineup vs ${oppName}. Check injury news first.`)} onTeam={() => oppIds && setSheet({ type: "team", team: oppName })} checklist={(state.checklist || {})[week] || {}} onCheck={(id) => update((s) => { const cl = { ...(s.checklist || {}) }; const w = { ...(cl[week] || {}) }; w[id] = !w[id]; cl[week] = w; return { ...s, checklist: cl }; })} scores={state.scores || {}} onImport={() => setSheet({ type: "import" })} onSources={() => setSheet({ type: "sources" })} />}
         {tab === "team" && <TeamView roster={roster} active={active} irList={irList} week={week} myRank={myRank} rec={rec} results={results} notes={state.notes} limit={ROSTER_LIMIT} onPlayer={openPlayer} onNotes={setNotes} owner={owner} oppName={oppName} onFromIR={fromIR} history={state.history || []} onRestore={restoreSnap} onRestoreKnown={restoreKnown} onImport={() => setSheet({ type: "import" })} />}
         {tab === "market" && <MarketView active={active} irList={irList} week={week} freeAgents={freeAgents} upgrades={upgrades} worstAt={worstAt} watch={state.watch} onWatch={toggleWatch} onAdd={(pl) => setSheet({ type: "add", pick: pl })} onPlayer={openPlayer} power={power} onTeam={(t) => setSheet({ type: "team", team: t })} log={state.log} onImport={() => setSheet({ type: "import" })} onLogOne={() => setSheet({ type: "add" })} />}
-        {tab === "league" && <LeagueView week={week} power={power} standings={standings} sim={sim} scores={state.scores || {}} owner={owner} playoffTeams={settings.playoffTeams || 6} onTeam={(t) => setSheet({ type: "team", team: t })} onPlayer={openPlayer} onScores={() => setSheet({ type: "scores" })} myLineup={lineup} onBox={(a, b) => setSheet({ type: "box", a, b })} />}
+        {tab === "league" && <LeagueView week={week} power={power} standings={standings} sim={sim} scores={state.scores || {}} owner={owner} playoffTeams={settings.playoffTeams || 6} onTeam={(t) => setSheet({ type: "team", team: t })} onPlayer={openPlayer} onScores={() => setSheet({ type: "scores" })} myLineup={lineup} onBox={(a, b) => setSheet({ type: "box", a, b })} onReport={() => setSheet({ type: "report" })} />}
         {tab === "rankings" && <RankingsView week={week} owner={owner} watch={state.watch} onWatch={toggleWatch} onPlayer={openPlayer} />}
         {tab === "matchup" && <MatchupView week={week} lineup={lineup} byId={byId} bench={bench} opp={opp} oppName={oppName} myLive={myLive} onPlayer={openPlayer} onTeam={() => oppIds && setSheet({ type: "team", team: oppName })} onCoach={() => askCoach(`Game plan for Week ${week} vs ${oppName}: where do I win, where do I lose, and what should I change?`)} onBox={() => setSheet({ type: "box", a: ME, b: oppName })} results={results} />}
         {tab === "schedule" && <ScheduleView week={week} scores={state.scores || {}} standings={standings} sim={sim} power={power} playoffTeams={settings.playoffTeams || 6} onTeam={(t) => t !== ME && setSheet({ type: "team", team: t })} onBox={(a, b) => setSheet({ type: "box", a, b })} />}
-        {tab === "edge" && <EdgeView week={week} vegas={state.vegas} vegasBusy={vegasBusy} vegasErr={vegasErr} onVegas={pullVegas} apiBase={apiBase} owner={owner} onPlayer={openPlayer} roster={active} oppName={oppName} oppIds={oppIds} bankroll={settings.bankroll || 500} bets={state.bets || []} onLogBet={logBet} onSettle={settleBet} onRemove={removeBet} slip={state.slip || []} onAddLeg={addLeg} onRemoveLeg={removeLeg} onClearSlip={clearSlip} />}
+        {tab === "edge" && <EdgeView picksLog={state.picksLog || {}} week={week} vegas={state.vegas} vegasBusy={vegasBusy} vegasErr={vegasErr} onVegas={pullVegas} apiBase={apiBase} owner={owner} onPlayer={openPlayer} roster={active} oppName={oppName} oppIds={oppIds} bankroll={settings.bankroll || 500} bets={state.bets || []} onLogBet={logBet} onSettle={settleBet} onRemove={removeBet} slip={state.slip || []} onAddLeg={addLeg} onRemoveLeg={removeLeg} onClearSlip={clearSlip} />}
         {tab === "coach" && <CoachView state={state} week={week} lineup={lineup} byId={byId} bench={bench} irList={irList} rec={rec} opp={opp} oppName={oppName} power={power} freeAgents={freeAgents} prefill={coachPrefill} clearPrefill={() => setCoachPrefill("")} setChat={setChat} standings={standings} sim={sim} />}
       </main>
 
@@ -1858,7 +1931,8 @@ export default function App() {
         onTrade={() => setSheet({ type: "trade", team: owner[sheet.id], want: sheet.id })} onAsk={askCoach} onClose={() => setSheet(null)} />}
       {sheet && sheet.type === "add" && <AddSheet pick={sheet.pick} active={active} week={week} owner={owner} limit={ROSTER_LIMIT} onAdd={(pl, dropId) => { addPlayer(pl, dropId); setSheet(null); }} onClose={() => setSheet(null)} />}
       {sheet && sheet.type === "team" && state.teams[sheet.team] && <TeamSheet team={sheet.team} ids={state.teams[sheet.team]} week={week} power={power} freeAgents={freeAgents} log={state.log} onTrade={() => setSheet({ type: "trade", team: sheet.team })} onAdd={(pl) => teamAdd(sheet.team, pl)} onDrop={(id) => teamDrop(sheet.team, id)} onPlayer={openPlayer} onClose={() => setSheet(null)} />}
-      {sheet && sheet.type === "trade" && state.teams[sheet.team] && <TradeSheet team={sheet.team} theirIds={state.teams[sheet.team]} active={active} want={sheet.want} limit={ROSTER_LIMIT} onExecute={(give, get) => { executeTrade(sheet.team, give, get); setSheet(null); }} onAsk={askCoach} onClose={() => setSheet(null)} />}
+      {sheet && sheet.type === "trade" && state.teams[sheet.team] && <TradeSheet week={week} freeAgents={freeAgents} team={sheet.team} theirIds={state.teams[sheet.team]} active={active} want={sheet.want} limit={ROSTER_LIMIT} onExecute={(give, get) => { executeTrade(sheet.team, give, get); setSheet(null); }} onAsk={askCoach} onClose={() => setSheet(null)} />}
+      {sheet && sheet.type === "report" && <ReportSheet week={week} text={buildReport(week, state.scores || {}, standings, power, lineup, byId, state.log)} onClose={() => setSheet(null)} />}
       {sheet && sheet.type === "box" && <BoxSheet a={sheet.a} b={sheet.b} week={week} power={power} myLineup={lineup} myById={byId} scores={state.scores || {}} onPlayer={openPlayer} onClose={() => setSheet(null)} />}
       {sheet && sheet.type === "scores" && <ScoresSheet week={week} scores={state.scores || {}} onScore={setScore} onClose={() => setSheet(null)} teams={state.teams} myIds={active.map((p) => p.id)} myLineup={state.lineups[week] || null} />}
       {sheet && sheet.type === "import" && <ImportSheet owner={owner} seen={state.txSeen || []} onApply={(mv) => { applyMoves(mv); setSheet(null); }} onClose={() => setSheet(null)} apiBase={apiBase} week={week} roster={roster} teams={state.teams} onScores={setScore}
@@ -1916,7 +1990,27 @@ const CHECKLIST = [
   { id: "scores", day: "Monday", text: "Enter all seven scores", how: "League tab, Enter scores.", auto: (c) => !!(c.scores[c.week] && c.scores[c.week][ME] != null) },
   { id: "box", day: "Monday", text: "Paste the Yahoo box score", how: "Coming: actual points by player feed the model." },
 ];
-function Recap({ week, lineup, byId, bench, scores, oppName, onPlayer }) {
+function buildReport(week, scores, standings, power, lineup, byId, log) {
+  const L = []; const sc = scores[week] || {}; const done = new Set(); const games = [];
+  LEAGUE_TEAMS.forEach((a) => { const b = LSCHED[week][a]; if (done.has(a) || !b) return; done.add(a); done.add(b); games.push([a, b]); });
+  L.push(`HOGG HEAVEN, WEEK ${week}`); L.push("");
+  games.forEach(([a, b]) => { const sa = sc[a], sb = sc[b]; if (sa == null || sb == null) { L.push(`${a} vs ${b}: pending`); return; } const win = parseFloat(sa) > parseFloat(sb) ? a : b; L.push(`${win === a ? a : b} over ${win === a ? b : a}, ${win === a ? sa : sb} to ${win === a ? sb : sa}`); });
+  const hi = LEAGUE_TEAMS.map((t) => [t, parseFloat(sc[t])]).filter((x) => !isNaN(x[1])).sort((a, b) => b[1] - a[1]); if (hi.length) { L.push(""); L.push(`High: ${hi[0][0]} ${hi[0][1]}. Low: ${hi[hi.length - 1][0]} ${hi[hi.length - 1][1]}.`); }
+  const top = POOL.map((p) => ({ p, a: actualOf(p, week) })).filter((x) => x.a && x.a.done).sort((x, y) => y.a.pts - x.a.pts).slice(0, 5); if (top.length) { L.push(""); L.push("Top scorers: " + top.map((x) => `${lastName(x.p.n)} ${fmt1(x.a.pts)}`).join(", ")); }
+  const snap = (PSNAP && PSNAP[week]) || {}; const mine = SLOTS.map((s0) => (lineup[s0.k] ? byId[lineup[s0.k]] : null)).filter(Boolean).map((p) => { const a = actualOf(p, week); const pr = snap[p.id] != null ? snap[p.id] : wkPts(p, week); return { p, act: a ? a.pts : null, d: a ? a.pts - pr : null }; }).filter((x) => x.act != null);
+  if (mine.length) { const best = [...mine].sort((a, b) => b.d - a.d); L.push(""); L.push(`Dimes: ${fmt1(mine.reduce((a, x) => a + x.act, 0))} scored. Best call ${lastName(best[0].p.n)} (${signed(best[0].d)} vs projection), worst ${lastName(best[best.length - 1].p.n)} (${signed(best[best.length - 1].d)}).`); }
+  const moves = (log || []).filter((e) => /added|dropped|trade/i.test(e.text)).slice(0, 8); if (moves.length) { L.push(""); L.push("Moves: " + moves.map((e) => e.text.replace(/\.$/, "")).join("; ")); }
+  L.push(""); L.push("Standings: " + standings.slice(0, 6).map((x, i) => `${i + 1}. ${x.team} ${x.w}-${x.l}`).join(", "));
+  L.push(""); L.push("dimes-hq.com");
+  return L.join("\n");
+}
+function ReportSheet({ week, text, onClose }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => { try { await navigator.clipboard.writeText(text); setCopied(true); setTimeout(() => setCopied(false), 1500); } catch (e) { /* ignore */ } };
+  const share = async () => { try { if (navigator.share) await navigator.share({ title: `Hogg Heaven Week ${week}`, text }); else copy(); } catch (e) { /* cancelled */ } };
+  return (<Sheet title={`Week ${week} report`} sub="One screen for the league chat. Copy or share." onClose={onClose}><pre className="report">{text}</pre><div className="btns"><button className="btn pri" onClick={share}>Share</button><button className="btn" onClick={copy}>{copied ? "Copied" : "Copy text"}</button></div></Sheet>);
+}
+function Recap({ week, lineup, byId, bench, scores, oppName, onPlayer, onReport }) {
   const starters = SLOTS.map((s0) => (lineup[s0.k] ? byId[lineup[s0.k]] : null)).filter(Boolean);
   const done = starters.filter((p) => { const a = actualOf(p, week); return a && a.done; });
   if (done.length < Math.max(6, starters.length - 2)) return null;
@@ -1932,6 +2026,7 @@ function Recap({ week, lineup, byId, bench, scores, oppName, onPlayer }) {
       <div className="stats" style={{ gridTemplateColumns: "repeat(3,1fr)", paddingTop: 4 }}><div className="stat"><div className="v cond">{fmt1(actTot)}</div><div className="k">scored</div></div><div className="stat"><div className={"v cond " + (actTot >= projTot ? "up" : "dn")}>{signed(actTot - projTot)}</div><div className="k">vs projected {fmt1(projTot)}</div></div><div className="stat"><div className={"v cond " + (left > 8 ? "dn" : "")}>{fmt1(left)}</div><div className="k">left on the bench</div></div></div>
       <div className="ssec"><span>Best calls</span><span>Worst</span></div>
       {[...sorted.slice(0, 2), ...sorted.slice(-2).reverse()].map((r, i) => <PRow key={r.p.id + i} p={r.p} week={week} onClick={() => onPlayer(r.p.id)} sub={`projected ${fmt1(r.proj)}`} right={<span className={"pill " + (r.d >= 0 ? "up" : "d")}>{signed(r.d)}</span>} />)}
+      <div className="btns" style={{ paddingTop: 0 }}><button className="btn" onClick={onReport}>Week {week} report for the league</button></div>
       <div className="hint">Projections are the ones on file when the games started. "Left on the bench" is the best lineup you could have set with hindsight minus what you scored.</div>
     </section>
   );
@@ -1953,7 +2048,7 @@ function Checklist({ week, done, onToggle, ctx, onImport, onSources }) {
     </section>
   );
 }
-function HomeView({ week, actions, lineup, isSaved, byId, bench, irList, myTotal, myLive, onFromIR, opp, oppName, res, onResult, onSlot, onAuto, onResetAuto, onPlayer, onCoach, onTeam, vegas, vegasBusy, vegasErr, onVegas, apiBase, checklist, onCheck, scores, onImport, onSources }) {
+function HomeView({ week, actions, lineup, isSaved, byId, bench, irList, myTotal, myLive, onFromIR, onReport, opp, oppName, res, onResult, onSlot, onAuto, onResetAuto, onPlayer, onCoach, onTeam, vegas, vegasBusy, vegasErr, onVegas, apiBase, checklist, onCheck, scores, onImport, onSources }) {
   const [showOpp, setShowOpp] = useState(false);
   const myT = useTween(myTotal), opT = useTween(opp ? opp.total : 0);
   const my = parseFloat(res.my), op = parseFloat(res.opp); const done = !isNaN(my) && !isNaN(op);
@@ -1979,7 +2074,7 @@ function HomeView({ week, actions, lineup, isSaved, byId, bench, irList, myTotal
         </>) : <div className="edge">Playoff opponent is not set yet.</div>}
       </section>
 
-      <Recap week={week} lineup={lineup} byId={byId} bench={bench} scores={scores} oppName={oppName} onPlayer={onPlayer} />
+      <Recap week={week} lineup={lineup} byId={byId} bench={bench} scores={scores} oppName={oppName} onPlayer={onPlayer} onReport={onReport} />
       <Checklist week={week} done={checklist} onToggle={onCheck} ctx={{ week, vegas, saved: isSaved, scores }} onImport={onImport} onSources={onSources} />
       <VegasCard week={week} vegas={vegas} busy={vegasBusy} err={vegasErr} onPull={onVegas} lineup={lineup} byId={byId} apiBase={apiBase} />
     </div><div className="col">
@@ -2039,7 +2134,8 @@ function CompareSheet({ lineup, autoL, byId, week, myTotal, autoTotal, onApply, 
 // PLAYER SHEET (mine, free agent, or someone else's)
 // =============================================================================
 function PlayerSheet({ p, mine, ownerName, week, irCount, watched, onStatus, onNote, onDrop, onAdd, onWatch, onTrade, onAsk, onClose, lineup, byId, onMove, onSwap, onIR, onFromIR }) {
-  const [confirmDrop, setConfirmDrop] = useState(false);
+  const [confirmDrop, setConfirmDrop] = useState(false); const [hl, setHl] = useState(false); const [vids, setVids] = useState(null);
+  useEffect(() => { if (!hl || vids || !p) return; const base = WEB ? "" : DEFAULT_API; (async () => { try { const r = await fetch(`${base}/api/highlights?q=${encodeURIComponent(p.n)}`); const j = await r.json(); setVids(j && !j.error ? j : { videos: [], search: `https://www.youtube.com/results?search_query=${encodeURIComponent(p.n + " 2026 highlights")}` }); } catch (e) { setVids({ videos: [], search: `https://www.youtube.com/results?search_query=${encodeURIComponent(p.n + " 2026 highlights")}` }); } })(); }, [hl, p && p.id]);
   if (!p) return null;
   const next = [week, week + 1, week + 2].filter((w) => w <= 18);
   const news = newsFor(p); const flags = (p.fl || "").split("").filter((f) => FLAG_TEXT[f]);
@@ -2078,6 +2174,12 @@ function PlayerSheet({ p, mine, ownerName, week, irCount, watched, onStatus, onN
       {p.s25 && <div className="s25"><div className="ssec" style={{ padding: "6px 0 4px" }}><span>2025 season{p.s25.team25 && p.s25.team25 !== p.t ? ` (${p.s25.team25})` : ""}</span><span>{p.s25.g} games, {p.s25.ppg} pts/game</span></div><div className="s25g">{(p.p === "QB" ? [["Pass yds", p.s25.py], ["Pass TD", p.s25.ptd], ["INT", p.s25.int], ["Rush yds", p.s25.ry], ["Rush TD", p.s25.rtd]] : p.p === "RB" ? [["Carries", p.s25.car], ["Rush yds", p.s25.ry], ["Rush TD", p.s25.rtd], ["Targets", p.s25.tgt], ["Rec yds", p.s25.recy], ["Rec TD", p.s25.rectd]] : [["Targets", p.s25.tgt], ["Rec", p.s25.rec], ["Rec yds", p.s25.recy], ["Rec TD", p.s25.rectd], ["Tgt share", p.s25.ts != null ? p.s25.ts + "%" : "–"]]).map(([k, v]) => <span key={k}><b className="cond">{v}</b><small>{k}</small></span>)}</div></div>}
 
 
+      {hl && (
+        <div className="hlbox">
+          {!vids && <div className="hint">Finding highlights…</div>}
+          {vids && vids.videos && vids.videos.length > 0 && <><div className="hlframe"><iframe src={`https://www.youtube.com/embed/${vids.videos[0].id}?rel=0`} title={vids.videos[0].title} allow="accelerometer; autoplay; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /></div><div className="hllist">{vids.videos.slice(1, 5).map((v) => <a key={v.id} href={`https://www.youtube.com/watch?v=${v.id}`} target="_blank" rel="noreferrer" className="hlrow">{v.thumb && <img src={v.thumb} alt="" />}<span><b>{v.title}</b><small>{v.channel}</small></span></a>)}</div></>}
+          {vids && (!vids.videos || !vids.videos.length) && <div className="hint" style={{ paddingTop: 4 }}><a className="btn pri" href={vids.search} target="_blank" rel="noreferrer">Open {lastName(p.n)} 2026 highlights on YouTube</a><div className="small muted" style={{ marginTop: 8 }}>{vids.note ? "Add a YOUTUBE_API_KEY on Vercel and the videos play right here." : "No embeddable videos found; the search opens in YouTube."}</div></div>}
+        </div>)}
       {mine && lineup && (() => { const inSlot = Object.keys(lineup).find((k) => lineup[k] === p.id); const onIRnow = p.status === "ir"; const elig = SLOTS.filter((s0) => s0.elig.includes(p.p)); const bye = matchup(p.t, week).bye; return (
         <div className="field"><label>Lineup, week {week}</label>
           <div className="lnmv">
@@ -2094,6 +2196,7 @@ function PlayerSheet({ p, mine, ownerName, week, irCount, watched, onStatus, onN
       {mine && <div className="field"><label>Note</label><input value={p.note || ""} onChange={(e) => onNote(e.target.value)} placeholder="Hamstring, limited Wed. Snap share up. Trade bait." /></div>}
       {news.length > 0 && <><div className="ssec"><span>Fantasy Index notes, Sept 7</span></div><div className="card">{news.map((n, i) => <div key={i} className="nitem"><p>{n.x}</p></div>)}</div></>}
       <div className="btns">
+        {p.p !== "DEF" && <button className="btn" onClick={() => setHl((v) => !v)}>{hl ? "Hide highlights" : "View highlights"}</button>}
         {isFA && <button className="btn pri" onClick={onAdd}>Add to my roster</button>}
         {isFA && <button className={"btn" + (watched ? " hl" : "")} onClick={onWatch}>{watched ? "On watchlist" : "Watch"}</button>}
         {mine && (!confirmDrop ? <button className="btn danger" onClick={() => setConfirmDrop(true)}>Drop</button> : <><button className="btn danger" onClick={onDrop}>Yes, drop {lastName(p.n)}</button><button className="btn" onClick={() => setConfirmDrop(false)}>Keep</button></>)}
@@ -2482,7 +2585,7 @@ function ScheduleView({ week, scores, standings, sim, power, playoffTeams, onTea
     </div></div>
   );
 }
-function LeagueView({ week, power, standings, sim, scores, owner, playoffTeams, onTeam, onPlayer, onScores, myLineup, onBox }) {
+function LeagueView({ week, power, standings, sim, scores, owner, playoffTeams, onTeam, onPlayer, onScores, myLineup, onBox, onReport }) {
   const [posTab, setPosTab] = useState("RB");
   const avg = useMemo(() => { const a = {}; POS_LIST.forEach((g) => { const v = power.map((r) => posStrength(r, g)); a[g] = v.length ? v.reduce((x, y) => x + y, 0) / v.length : 0; }); return a; }, [power]);
   const mine = power.find((r) => r.team === ME);
@@ -2505,7 +2608,7 @@ function LeagueView({ week, power, standings, sim, scores, owner, playoffTeams, 
             <span className="cond muted pa">{x.g ? (x.pa / x.g).toFixed(1) : "–"}</span>
             <span className="odds"><i style={{ width: `${o ? Math.round(o.odds * 100) : 0}%` }} /><b className="cond">{o ? Math.round(o.odds * 100) + "%" : "–"}</b></span>
           </button>); })}
-        <div className="btns"><button className="btn pri" onClick={onScores}>Enter Week {week} scores</button></div>
+        <div className="btns"><button className="btn pri" onClick={onScores}>Enter Week {week} scores</button><button className="btn" onClick={onReport}>Week {week} report</button></div>
         <div className="hint">{played ? "Playoff odds from 2,500 simulated seasons of the remaining schedule, using each team's projected lineup." : "Preseason odds: everyone is 0-0, so these come entirely from projected roster strength and the schedule. Results take over as games are played."} Top {playoffTeams} make it, points-for breaks ties.</div>
       </section>
 
@@ -2607,7 +2710,30 @@ function TeamSheet({ team, ids, week, power, freeAgents, onTrade, onAdd, onDrop,
     </Sheet>
   );
 }
-function TradeSheet({ team, theirIds, active, want, limit, onExecute, onAsk, onClose }) {
+function evaluateTrade(give, get, active, theirIds, week, freeAgents) {
+  const g = give.map((id) => POOL_BY_ID[id]).filter(Boolean), r = get.map((id) => POOL_BY_ID[id]).filter(Boolean);
+  const repl = {}; POS_LIST.forEach((pos) => { const fa = freeAgents.filter((p) => p.p === pos && hasProj(p)).sort((a, b) => pw(b) - pw(a)); repl[pos] = fa.length ? pw(fa[0]) : 0; });
+  const surplus = (p) => Math.max(0, pw(p) - (repl[p.p] || 0));
+  const myAfterIds = [...active.filter((p) => !give.includes(p.id)).map((p) => p.id), ...get]; const thAfterIds = [...theirIds.filter((id) => !get.includes(id)), ...give];
+  const wks = Array.from({ length: Math.min(6, REG_WEEKS - week + 1) }, (_, i) => week + i);
+  const lineupAvg = (ids) => { const ps = ids.map((id) => POOL_BY_ID[id]).filter(Boolean); const byId = Object.fromEntries(ps.map((p) => [p.id, p])); return wks.reduce((a, w) => a + lineupTotal(bestLineup(ps, w), byId, w), 0) / wks.length; };
+  const myB = lineupAvg(active.map((p) => p.id)), myA = lineupAvg(myAfterIds), thB = lineupAvg(theirIds), thA = lineupAvg(thAfterIds);
+  const playoffs = (list) => { const v = list.map((p) => { const sr = sosRos(p); return sr && sr.playoffs != null ? sr.playoffs : null; }).filter((x) => x != null); return v.length ? v.reduce((a, b) => a + b, 0) / v.length : null; };
+  const pIn = playoffs(r), pOut = playoffs(g);
+  const myStarterByes = new Set(active.filter((p) => !give.includes(p.id)).map((p) => `${p.p}${p.b}`)); const byeClash = r.filter((p) => myStarterByes.has(`${p.p}${p.b}`)).map((p) => `${lastName(p.n)} shares a week ${p.b} bye with a ${p.p} you keep`);
+  const depthNotes = r.map((p) => { const d = depthOf(p); return d && !d.missing && d.order > 1 ? `${lastName(p.n)} is ${p.p}${d.order} on his own depth chart` : d && d.flag === "battle" ? `${lastName(p.n)} is in an open battle` : null; }).filter(Boolean);
+  const gradeNum = (myA - myB) + 0.15 * (r.reduce((a, p) => a + surplus(p), 0) - g.reduce((a, p) => a + surplus(p), 0)) + (pIn != null && pOut != null ? 0.4 * (pIn - pOut) : 0) - 0.6 * byeClash.length - 0.8 * depthNotes.length;
+  const grade = gradeNum >= 4 ? "A" : gradeNum >= 2 ? "B" : gradeNum >= 0.5 ? "B-" : gradeNum >= -0.5 ? "C" : gradeNum >= -2 ? "D" : "F";
+  const reasons = [];
+  reasons.push(`Your best lineup over the next ${wks.length} weeks goes ${signed(Math.round((myA - myB) * 10) / 10)} per week; theirs ${signed(Math.round((thA - thB) * 10) / 10)}.`);
+  const sIn = Math.round(r.reduce((a, p) => a + surplus(p), 0) * 10) / 10, sOut = Math.round(g.reduce((a, p) => a + surplus(p), 0) * 10) / 10; reasons.push(`Value over the best free agent at each spot: you receive ${sIn}, you send ${sOut}${sIn - sOut >= 2 ? " (scarcity is on your side)" : sOut - sIn >= 2 ? " (you are giving up the scarcer pieces)" : ""}.`);
+  if (pIn != null && pOut != null) reasons.push(`Playoff schedule (weeks 15 to 17): incoming players average ${pIn.toFixed(1)}/10, outgoing ${pOut.toFixed(1)}/10.`);
+  byeClash.forEach((x) => reasons.push(x + "."));
+  depthNotes.forEach((x) => reasons.push(x + "."));
+  const bal = (myA - myB) - (thA - thB); reasons.push(Math.abs(bal) < 1.5 ? "Roughly even on paper, which is the kind of deal that gets accepted." : bal > 0 ? "Tilted your way; expect a counter." : "Tilted their way; ask for more.");
+  return { grade, gradeNum, reasons, myA, myB, thA, thB };
+}
+function TradeSheet({ team, theirIds, active, want, limit, onExecute, onAsk, onClose, week, freeAgents }) {
   const [give, setGive] = useState([]); const [get, setGet] = useState(want ? [want] : []);
   const theirs = theirIds.map((id) => POOL_BY_ID[id]).filter(Boolean).sort((a, b) => pw(b) - pw(a)); const mine = [...active].sort((a, b) => pw(b) - pw(a));
   const tg = (list, set, id) => set(list.includes(id) ? list.filter((x) => x !== id) : [...list, id]);
@@ -2615,10 +2741,12 @@ function TradeSheet({ team, theirIds, active, want, limit, onExecute, onAsk, onC
   const thBefore = teamStrength(theirIds).total, thAfter = teamStrength([...theirIds.filter((id) => !get.includes(id)), ...give]).total;
   const dMe = myAfter - myBefore, dTh = thAfter - thBefore; const myCount = active.length - give.length + get.length, thCount = theirIds.length - get.length + give.length;
   const ready = give.length > 0 && get.length > 0;
+  const ev = ready ? evaluateTrade(give, get, active, theirIds, week, freeAgents || []) : null;
   const summary = () => `Trade idea with ${team}: I give ${give.map((id) => POOL_BY_ID[id] ? POOL_BY_ID[id].n : id).join(", ")} and get ${get.map((id) => POOL_BY_ID[id].n).join(", ")}. Projections say my best lineup goes ${signed(dMe)} per week and theirs ${signed(dTh)}. Good deal? Would they take it?`;
   return (
     <Sheet title={`Trade with ${team}`} sub="Tap players on both sides. Math is best lineup per week, byes ignored." onClose={onClose}>
       {ready && <div className="stats" style={{ gridTemplateColumns: "1fr 1fr", paddingTop: 2 }}><div className="stat"><div className={"delta cond " + (dMe >= 0 ? "up" : "dn")}>{signed(dMe)}</div><div className="k">Dimes per week{myCount > limit ? `, drop ${myCount - limit}` : ""}</div></div><div className="stat"><div className={"delta cond " + (dTh >= 0 ? "up" : "dn")}>{signed(dTh)}</div><div className="k">{team} per week{thCount > limit ? `, they drop ${thCount - limit}` : ""}</div></div></div>}
+      {ev && <div className="card" style={{ margin: "0 4px 8px" }}><div className="ch"><h2 className="cond">Grade</h2><span className={"aux cond tgrade " + (ev.grade[0] === "A" || ev.grade[0] === "B" ? "up" : ev.grade[0] === "C" ? "" : "dn")}>{ev.grade}</span></div><ul className="pkr" style={{ margin: "0 16px 10px" }}>{ev.reasons.map((r, i) => <li key={i}>{r}</li>)}</ul></div>}
       {ready && <div className="hint" style={{ paddingTop: 0 }}>{dMe > 0 && dTh > 0 ? "Both sides get better on paper. That is the kind of deal that gets accepted." : dMe > 0 && dTh <= 0 ? "Good for you, not for them. Expect a no unless they value something the projections do not." : dMe <= 0 ? "Projections say you get worse. Only do it if you know something." : ""}</div>}
       <div className="btns" style={{ paddingTop: 0 }}><button className="btn" disabled={!ready} onClick={() => onAsk(summary())}>Ask Coach</button><button className="btn pri" disabled={!ready} onClick={() => onExecute(give, get)}>Log this trade</button></div>
       <div className="tr">
@@ -2998,7 +3126,23 @@ function picksFrom(priced, games) {
     return { ...e, reasons, score: (e.pWin - e.fair) * Math.sqrt(Math.max(1, e.nb)) * (Math.abs(e.gap) >= 0.1 ? 1.2 : 1) };
   }).sort((a, b) => b.score - a.score).slice(0, 5);
 }
-function EdgeView({ week, vegas, vegasBusy, vegasErr, onVegas, apiBase, owner, onPlayer, roster, oppName, oppIds, bankroll, bets, onLogBet, onSettle, onRemove, slip, onAddLeg, onRemoveLeg, onClearSlip }) {
+function gradePick(pk, week) { const p = POOL_BY_ID[pk.id]; if (!p) return null; const u = usageOf(p); const r = u && u.wk[week]; if (!r) return null; const stat = pk.field === "pass_yds" ? r.py : pk.field === "rush_yds" ? r.ry : pk.field === "rec_yds" ? r.recy : pk.field === "rec" ? r.rec : pk.field === "atd" ? (p.p === "QB" ? null : r.td) : pk.field === "pass_tds" ? null : null; if (stat == null) return null; if (pk.field === "atd") return { stat, res: stat > 0 ? "W" : "L" }; const line = parseFloat(pk.line); if (isNaN(line)) return null; const res = stat === line ? "P" : pk.side === "Over" ? (stat > line ? "W" : "L") : (stat < line ? "W" : "L"); return { stat, res }; }
+function TrackRecord({ picksLog }) {
+  const rows = []; Object.keys(picksLog || {}).map(Number).sort((a, b) => a - b).forEach((w) => (picksLog[w] || []).forEach((pk) => { const g = gradePick(pk, w); rows.push({ ...pk, week: w, g }); }));
+  const graded = rows.filter((r) => r.g && r.g.res !== "P"); if (!rows.length) return null;
+  const units = (r) => (r.g.res === "W" ? (r.price > 0 ? r.price / 100 : 100 / Math.abs(r.price)) : -1);
+  const byTier = {}; graded.forEach((r) => { const t = r.tier || "Watch"; byTier[t] = byTier[t] || { n: 0, w: 0, u: 0 }; byTier[t].n++; if (r.g.res === "W") byTier[t].w++; byTier[t].u += units(r); });
+  const tot = graded.reduce((a, r) => a + units(r), 0);
+  return (
+    <section className="card"><div className="ch"><h2 className="cond">Track record</h2><span className="aux">{graded.length} graded of {rows.length} picks</span></div>
+      {graded.length > 0 && <div className="stats" style={{ gridTemplateColumns: "repeat(3,1fr)" }}><div className="stat"><div className="v cond">{Math.round((graded.filter((r) => r.g.res === "W").length / graded.length) * 100)}%</div><div className="k">hit rate</div></div><div className="stat"><div className={"v cond " + (tot >= 0 ? "up" : "dn")}>{signed(Math.round(tot * 100) / 100)}u</div><div className="k">flat 1u per pick</div></div><div className="stat"><div className="v cond">{Math.round((graded.reduce((a, r) => a + r.pWin, 0) / graded.length) * 100)}%</div><div className="k">avg model chance</div></div></div>}
+      {Object.keys(byTier).length > 0 && <div className="hint" style={{ paddingTop: 0 }}>{Object.keys(byTier).map((t) => `${t}: ${byTier[t].w}-${byTier[t].n - byTier[t].w}, ${signed(Math.round(byTier[t].u * 100) / 100)}u`).join(" · ")}</div>}
+      {rows.slice(-12).reverse().map((r, i) => <div key={r.key + r.mk + r.week + i} className="prow" style={{ gridTemplateColumns: "auto 1fr auto" }}><Badge p={POOL_BY_ID[r.id]} /><span><span className="pname"><span className="t">{r.n} {r.side} {r.line}</span>{r.tier && <span className={"pill tier " + r.tier.toLowerCase()}>{r.tier}</span>}</span><span className="psub">Week {r.week}, {r.mk}, {fmtPrice(r.price)}{r.g ? `, actual ${r.g.stat}` : ", not graded yet"}</span></span><span className={"pill " + (r.g ? (r.g.res === "W" ? "up" : r.g.res === "L" ? "d" : "own") : "own")}>{r.g ? r.g.res : "–"}</span></div>)}
+      <div className="hint">Best plays are logged on every pull and graded against the box score once the week's stats post. Hit rate and units by tier are the honest test of the model; a good model shows Strong beating Good beating Lean over time.</div>
+    </section>
+  );
+}
+function EdgeView({ week, vegas, vegasBusy, vegasErr, onVegas, apiBase, owner, onPlayer, roster, oppName, oppIds, bankroll, bets, onLogBet, onSettle, onRemove, slip, onAddLeg, onRemoveLeg, onClearSlip, picksLog }) {
   const fresh = vegasFresh(week);
   const [mk, setMk] = useState("ALL"); const [mineOnly, setMineOnly] = useState(false); const [showAll, setShowAll] = useState(false); const [help, setHelp] = useState(false);
   const [sel, setSel] = useState(() => new Set());
@@ -3072,6 +3216,7 @@ function EdgeView({ week, vegas, vegasBusy, vegasErr, onVegas, apiBase, owner, o
         {help && <div className="hint" style={{ paddingTop: 0 }}><b>Edge</b> is our chance minus the book's chance, in percentage points, using the best price at DraftKings, FanDuel or BetMGM. <b>Strong</b> means at least a 6% expected return with two or more books on the number and both projection sources behind it. <b>Good</b> is 3% or better. <b>Lean</b> is a small positive. Suggested stakes are a quarter of the Kelly criterion, capped at 3% of your bankroll. "Opened" shows where the line was on the first pull this week; a line moving toward our side means the market is agreeing. Even Strong plays lose about 40% of the time. Bet small and flat.</div>}
       </section>
 
+      <TrackRecord picksLog={picksLog} />
       <section className="card"><div className="ch"><h2 className="cond">Tracked bets</h2><span className="aux">{settled.length ? `${settled.filter((b) => b.result === "W").length}-${settled.filter((b) => b.result === "L").length}${settled.some((b) => b.result === "P") ? `-${settled.filter((b) => b.result === "P").length}` : ""}, ${signed(roi)} on ${staked} staked` : `${open.length} open`}</span></div>
         {bets.length === 0 && <div className="empty">Nothing tracked. Tracking is manual and optional: it records our probability and the price at the time, and each later pull records the newest price so you can see closing line value on what you actually bet.</div>}
         {bets.slice(0, 30).map((b) => { const c = clvOf(b); return (
