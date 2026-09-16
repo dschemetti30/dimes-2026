@@ -135,15 +135,24 @@ const TRANSACTIONS = [
   { t: "Sep 12", team: "Knappachino", add: "raiders-def", drop: "bengals-def" },
   { t: "Sep 13", team: ME, add: "odell-beckham-jr", drop: "najee-harris" },
   { t: "Sep 14", team: ME, add: "cyrus-allen", drop: "odell-beckham-jr" },
+  { t: "Sep 16", team: ME, add: null, drop: "cade-otton" },
+  { t: "Sep 16", team: ME, add: "kalif-raymond", drop: "cyrus-allen" },
+  { t: "Sep 16", team: ME, add: "eddy-pineiro", drop: "chase-mclaughlin" },
+  { t: "Sep 16", team: "USC_Nemo", add: "aaron-rodgers", drop: "dylan-sampson" },
+  { t: "Sep 16", team: "Underdog", add: "buccaneers-def", drop: "chig-okonkwo" },
+  { t: "Sep 16", team: "Team Riggo", add: "cooper-kupp", drop: null },
+  { t: "Sep 16", team: "2 Cups of Rice", add: "mack-hollins", drop: "kaytron-allen" },
+  { t: "Sep 16", team: "USC_Nemo", add: "george-holani", drop: "tyrone-tracy-jr" },
+  { t: "Sep 16", team: "2 Cups of Rice", add: "antonio-williams", drop: "demond-claiborne" },
 ];
 // Odell Beckham Jr. is not in the projection pool; he passed through your roster for a day and is gone again.
-const EXTRA_POOL = [{ id: "odell-beckham-jr", n: "Odell Beckham Jr.", p: "WR", t: "NYG", b: 8, a: 300 }];
+const EXTRA_POOL = [{ id: "odell-beckham-jr", n: "Odell Beckham Jr.", p: "WR", t: "NYG", b: 8, a: 300 }, { id: "mack-hollins", n: "Mack Hollins", p: "WR", t: "NE", b: 11, a: 300 }];
 EXTRA_POOL.forEach((p) => { if (!POOL_BY_ID[p.id]) { POOL.push(p); POOL_BY_ID[p.id] = p; } });
 const SCORES_BAKED = { 1: { "USC_Nemo": "171.76", "The Fun Brunch": "152.10", "SOULTRAIN": "138.84", "Brafferton Beast II": "137.92", "Donnie Dimes": "136.06", "Knappachino": "125.76", "The Manglers": "119.76", "What Would Breesus Do": "134.30", "Team Riggo": "124.26", "BIG DADDY": "120.16", "2 Cups of Rice": "119.24", "Nothing Else Matters": "104.32", "Underdog": "98.40", "Spictaculous": "92.40" } };
 const CEL_DEFAULT = ["josh-jacobs"]; // commissioner exempt list: zero until reinstated
 const IR_DEFAULT = ["treveyon-henderson", "jordyn-tyson"];
 // Your roster as of the Sept 9 Yahoo screenshot. "Restore" in Team puts it back exactly.
-const KNOWN_ROSTER = [["josh-allen", "ok"], ["rico-dowdle", "ok"], ["chris-rodriguez-jr", "ok"], ["amon-ra-st-brown", "ok"], ["luther-burden-iii", "ok"], ["cade-otton", "ok"], ["kc-concepcion", "ok"], ["devaughn-vele", "ok"], ["brock-bowers", "ok"], ["josh-jacobs", "o"], ["cyrus-allen", "ok"], ["caleb-douglas", "ok"], ["chris-brooks", "ok"], ["chris-bell", "ok"], ["chase-mclaughlin", "ok"], ["seahawks-def", "ok"], ["treveyon-henderson", "ir"], ["jordyn-tyson", "ir"]];
+const KNOWN_ROSTER = [["josh-allen", "ok"], ["rico-dowdle", "ok"], ["chris-rodriguez-jr", "ok"], ["amon-ra-st-brown", "ok"], ["luther-burden-iii", "ok"], ["kc-concepcion", "ok"], ["devaughn-vele", "ok"], ["brock-bowers", "ok"], ["josh-jacobs", "o"], ["kalif-raymond", "ok"], ["caleb-douglas", "ok"], ["chris-brooks", "ok"], ["chris-bell", "ok"], ["eddy-pineiro", "ok"], ["seahawks-def", "ok"], ["treveyon-henderson", "ir"], ["jordyn-tyson", "ir"]];
 const txKey = (t, act, id, team) => `${t}|${act}|${id}|${team}`;
 
 // =============================================================================
@@ -296,6 +305,11 @@ function migrate(s) {
   out = applyTransactions(out);
   if (!s.irSeeded) { out.roster = out.roster.map((p) => (IR_DEFAULT.includes(p.id) && (!p.status || p.status === "ok") ? { ...p, status: "ir" } : p)); out.irSeeded = true; }
   if (out.settings.rosterLimit === 17 && !s.limitSeeded) { out.settings.rosterLimit = 16; } out.limitSeeded = true;
+  // heal earlier imports that created "K. Raymond" style placeholders
+  const heal = (id, n, pos) => { const c = POOL_BY_ID[id]; if (c && !c.custom) return null; const p = resolveAbbrev(n, pos, { act: "add" }); return p || null; };
+  out.roster = out.roster.map((p) => { const h = heal(p.id, p.n, p.p); return h ? { ...h, status: p.status || "ok", note: p.note || "", via: p.via || "Yahoo" } : p; });
+  const seenIds = new Set(); out.roster = out.roster.filter((p) => (seenIds.has(p.id) ? false : (seenIds.add(p.id), true)));
+  Object.keys(out.teams || {}).forEach((t) => { out.teams[t] = out.teams[t].map((id) => { const c = POOL_BY_ID[id]; if (c && !c.custom) return id; const h = c ? heal(id, c.n, c.p) : null; return h ? h.id : id; }); });
   Object.keys(SCORES_BAKED).forEach((w) => { out.scores = { ...(out.scores || {}) }; out.scores[w] = { ...SCORES_BAKED[w], ...(out.scores[w] || {}) }; });
   if (!s.celSeeded) { out.roster = out.roster.map((p) => (CEL_DEFAULT.includes(p.id) && (!p.status || p.status === "ok") ? { ...p, status: "o", note: p.note || "Commissioner exempt list" } : p)); out.celSeeded = true; }
   if (!(out.projSnap || {})[1] && WEEKLY[1]) { const snap = {}; Object.keys(WEEKLY[1]).forEach((id) => { const w = WEEKLY[1][id]; const vals = [w.fi, w.fbg ? w.fbg[0] : null].filter((x) => x != null); if (vals.length) snap[id] = Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10; }); out.projSnap = { ...(out.projSnap || {}), 1: snap }; }
@@ -322,6 +336,16 @@ const DROP_WORDS = /^(to waivers|to free agents|dropped|drop|released)$/i;
 const TRADE_WORDS = /^(trade|traded|trade accepted|from trade)$/i;
 const DATE_RE = /^(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2}(,\s*\d{4})?(,?\s+\d{1,2}:\d{2}\s*(am|pm))?$/i;
 const PLAYER_RE = /^(.+?)\s+([A-Za-z]{2,3})\s*[-–]\s*(QB|RB|WR|TE|K|DEF|D\/ST|DST)\b.*$/;
+// "K. Raymond" style names from Yahoo screenshots: match initial + last name + position, prefer the roster context
+function resolveAbbrev(name, pos, ctx) {
+  const m = String(name || "").trim().match(/^([A-Za-z])\.?\s+(.+)$/); if (!m) return null;
+  const init = m[1].toLowerCase(); const last = normName(m[2]);
+  let c = POOL.filter((p) => p.p === pos && !p.custom && normName(p.n).endsWith(last) && normName(p.n).startsWith(init));
+  if (!c.length) return null; if (c.length === 1) return c[0];
+  if (ctx && ctx.act === "drop" && ctx.owned) { const on = c.filter((p) => ctx.owned(p.id) === ctx.team); if (on.length) c = on; }
+  if (ctx && ctx.act === "add" && ctx.owned) { const fa = c.filter((p) => !ctx.owned(p.id)); if (fa.length) c = fa; }
+  return c.sort((a, b) => (b.pw || 0) - (a.pw || 0))[0];
+}
 function findPlayer(name, team, pos) {
   if (pos === "DEF") { const p = POOL.find((x) => x.p === "DEF" && x.t === team); if (p) return p; }
   const k = normName(name);
@@ -1254,6 +1278,172 @@ textarea.notes{min-height:120px;resize:vertical;line-height:1.5}
 .iconb.on{color:#fff;background:var(--red)}
 .iconb.add{border-color:var(--rule2);color:var(--ink)}
 .iconb:active{background:var(--press)}
+
+/* ===================== Polish layer: type scale, rhythm, alignment ===================== */
+:root{--t-name:14px;--t-sub:11.5px;--t-val:19px;--t-h2:11.5px;--row-y:8px;--pad-x:14px}
+.cond{font-variant-numeric:tabular-nums}
+.pname{font-size:var(--t-name);font-weight:640;letter-spacing:-.006em;gap:6px}
+.psub{font-size:var(--t-sub);margin-top:2px;gap:5px;font-weight:500;line-height:1.25}
+.psub b{font-weight:600;color:var(--ink)}
+.prow{grid-template-columns:auto minmax(0,1fr) auto;gap:10px;padding:var(--row-y) var(--pad-x);min-height:52px}
+.prow .pright{gap:6px}
+.badge{width:36px;height:36px;border-radius:11px;font-size:12px}
+.badge .flx{font-size:7px;padding:1px 4px;top:-6px}
+.badge .bx .ln{height:2.5px}
+.val{min-width:44px}
+.val .n{font-size:var(--t-val);font-weight:800;letter-spacing:-.02em;line-height:1}
+.val .l{font-size:8.5px;margin-top:2px;letter-spacing:.12em}
+.val .tier{height:2px;margin-top:4px}
+.chev{font-size:15px;color:var(--rule2)}
+.card{border-radius:14px}
+.ch{padding:12px var(--pad-x) 6px;gap:8px}
+.ch h2{font-size:var(--t-h2);letter-spacing:.13em;gap:8px}
+.ch h2::before{width:3px;height:14px;border-radius:2px}
+.ch .aux{font-size:11px;font-weight:500}
+.hint{font-size:11.5px;line-height:1.5;padding:6px var(--pad-x) 12px;color:var(--ink2)}
+.empty{font-size:12.5px}
+.ssec{font-size:9.5px;letter-spacing:.13em}
+.pill{font-size:8.5px;padding:2px 5px;letter-spacing:.07em;border-radius:5px}
+.dpill{font-size:8.5px;padding:1px 4px}
+.mx{font-size:8.5px;padding:1px 5px}
+.btn{font-size:12.5px;padding:8px 13px;min-height:34px;border-radius:10px;font-weight:700}
+.btn.sm{font-size:11.5px;padding:5px 10px;min-height:28px;border-radius:8px}
+.btns{gap:8px;padding:8px var(--pad-x) 12px}
+.chip{font-size:11.5px;padding:5px 10px;font-weight:700}
+.chips{gap:6px}
+.seg button{font-size:12px;padding:7px 8px}
+.seg.sm button{font-size:11.5px;padding:5px 9px}
+.sh h1{font-size:19px;letter-spacing:-.015em}
+.sh .sub{font-size:12px}
+.sh .x{width:30px;height:30px}
+.field label{font-size:9.5px;letter-spacing:.12em}
+.board{padding:14px 16px 14px;border-radius:16px}
+.board .kick{font-size:10px;letter-spacing:.14em}
+.board .who{font-size:19px;letter-spacing:.01em}
+.board .sub{font-size:11px}
+.board .tot{font-size:42px}
+.board .vbar{height:5px;margin:8px 0 10px}
+.board .note{font-size:12px}
+.act{padding:9px var(--pad-x)}
+.act .t{font-size:13px}
+.act .s{font-size:11px}
+.act .ico{width:26px;height:26px;font-size:11px}
+.stats{padding:6px var(--pad-x) 8px;gap:8px}
+.stat{padding:10px 6px;border-radius:10px}
+.stat .v{font-size:20px}
+.stat .k{font-size:8.5px;letter-spacing:.12em}
+.pown{gap:12px 16px;padding:8px 2px 0}
+.pown b{font-size:15px}
+.pown small{font-size:8.5px;letter-spacing:.09em;margin-top:2px}
+.pbio{font-size:11.5px;padding:8px 2px 0}
+.pht{padding:10px 12px;border-radius:14px;gap:10px}
+.pht .pbig{font-size:32px}
+.pht .pmid{font-size:22px}
+.pht .lab{font-size:9px;letter-spacing:.12em}
+.hsh{width:60px;height:60px;border-radius:12px}
+.srow{font-size:13px;padding:7px 0}
+.srow .n small{font-size:11px}
+.srow .v{font-size:16px}
+.srow .w{font-size:10px}
+.s25g b{font-size:16px}
+.s25g small{font-size:8.5px}
+.usage table{font-size:12px}
+.usage th{font-size:8.5px;padding:3px 5px}
+.usage td{padding:4px 5px}
+.prep{font-size:12.5px;padding:8px 11px;border-radius:9px}
+.prep small{font-size:11px}
+.strow{padding:8px var(--pad-x);font-size:13px}
+.strow .t{font-size:13px;font-weight:650}
+.strow .rk{font-size:12px}
+.strow .wl{font-size:13.5px}
+.strow .wl small{font-size:8.5px}
+.sthead{font-size:8.5px;letter-spacing:.12em;padding:6px var(--pad-x) 4px}
+.mu2 .tm{font-size:13px}
+.mu2 .scores b{font-size:16px}
+.mu2 .scores small{font-size:8.5px}
+.mu2 .wp{font-size:10.5px}
+.mu2 .bar{height:5px}
+.cki{padding:7px 0;gap:10px}
+.cki .box{width:20px;height:20px;border-radius:6px;font-size:11px}
+.cki .tx b{font-size:13px}
+.cki .tx small{font-size:11px;margin-top:1px}
+.ckd{font-size:9.5px;padding:8px 0 2px}
+.ckday{padding:2px var(--pad-x) 4px}
+.prog{height:5px;margin:0 var(--pad-x) 6px}
+.nstory{padding:8px var(--pad-x)}
+.ntitle{font-size:13px}
+.nrow{padding:5px var(--pad-x) 7px}
+.ntext{font-size:12.5px;padding-left:46px}
+.wkc{width:34px;height:34px;font-size:13.5px}
+.wkline{font-size:12px}
+.mast .rec{font-size:24px}
+.mast .rec small{font-size:8.5px}
+.nav button{font-size:12.5px}
+.vg2{padding:8px var(--pad-x)}
+.vgl .sc{font-size:19px}
+.vgm{font-size:10.5px}
+.gcard{padding:0 12px 10px}
+.gteam .pts{font-size:26px}
+.gtop{font-size:10.5px}
+.gline{font-size:12px}
+.fol{font-size:11.5px;padding:5px 8px}
+.gpl{font-size:11px}
+.wx{font-size:10.5px}
+.gstakes{font-size:11px}
+.pick{padding:10px var(--pad-x)}
+.pkn{width:22px;height:22px;font-size:12px}
+.pkv b.tier{font-size:14px}
+.pkv small{font-size:10.5px}
+.pkr{font-size:12.5px}
+.pkf{font-size:11px;gap:12px}
+.pkf b{font-size:14px}
+.sth{padding:4px var(--pad-x) 2px}
+.shb{font-size:8.5px}
+.tbl .tr{padding:5px var(--pad-x)}
+.tbl .tr .c{font-size:13px}
+.rgh>*{font-size:8.5px;padding:7px 5px}
+.rgr>*{padding:5px 5px}
+.rgr .c{font-size:12.5px}
+.rgr .pl .pname .t{max-width:140px}
+.rgr .rk{font-size:11px}
+.h2h{padding:5px 8px}
+.h2hp .nm b{font-size:13px}
+.h2hp .nm small{font-size:10.5px}
+.h2hp .v{font-size:16px}
+.h2hm .slot{font-size:9px}
+.h2hm .d{font-size:13px}
+.skg{padding:4px var(--pad-x)}
+.skg .t{font-size:12.5px}
+.skg .sc{font-size:12.5px}
+.skh{font-size:11px}
+.brk2{font-size:12.5px;padding:5px var(--pad-x)}
+.morerow b{font-size:14px}.morerow small{font-size:11.5px}
+.log>div{font-size:12.5px}
+.log .t{font-size:10px}
+.tmark{border-radius:8px}
+.nmark{border-radius:10px}
+.syncbox b{font-size:13px}.syncbox small{font-size:11.5px}
+.small{font-size:11.5px}
+textarea.notes,input,select{font-size:13.5px;padding:9px 11px;border-radius:10px}
+@media (min-width:900px){
+  .pg{padding:20px 28px 40px}
+  .cols{gap:16px}
+  .card{margin-bottom:14px}
+  .board .tot{font-size:46px}
+}
+.prow.irrow .pill.ir{display:none}
+.prow.irrow .pright{gap:8px}
+@media (max-width:899px){
+  .prow.irrow .val{display:none}
+  .pname{font-size:13.5px}
+  .val .n{font-size:18px}
+  .prow{padding:7px 12px;min-height:50px;gap:9px}
+  .ch{padding:11px 12px 5px}
+  .hint{padding:6px 12px 11px}
+  .badge{width:34px;height:34px;font-size:11.5px}
+  .board .tot{font-size:38px}
+  .board .who{font-size:17px}
+}
 `;
 
 // =============================================================================
@@ -1414,7 +1604,7 @@ export default function App() {
   const snapOf = (s, label) => ({ at: Date.now(), label, roster: s.roster, teams: s.teams, lineups: s.lineups, week });
   const undoable = (fn, text) => { undoRef.current = state; update((s) => { const ns = fn(s); const same = ns.roster === s.roster && ns.teams === s.teams && ns.lineups === s.lineups; return same ? ns : { ...ns, history: [snapOf(s, text), ...(s.history || [])].slice(0, 12) }; }); showToast(text, true); };
   const restoreSnap = (i) => update((s) => { const h = (s.history || [])[i]; if (!h) return s; return addLog({ ...s, roster: h.roster, teams: h.teams, lineups: h.lineups, history: [snapOf(s, "Before restore"), ...(s.history || [])].slice(0, 12) }, `Restored rosters to before "${h.label}".`); });
-  const restoreKnown = () => update((s) => { const keep = Object.fromEntries(s.roster.map((p) => [p.id, p])); const roster = KNOWN_ROSTER.map(([id, st]) => ({ ...(POOL_BY_ID[id] || { id, n: id }), ...(keep[id] ? { note: keep[id].note, via: keep[id].via } : { note: "", via: "Yahoo" }), status: st })); return addLog({ ...s, roster, history: [snapOf(s, "Before restoring the Sept 14 roster"), ...(s.history || [])].slice(0, 12) }, "Roster restored to the Sept 14 Yahoo snapshot."); });
+  const restoreKnown = () => update((s) => { const keep = Object.fromEntries(s.roster.map((p) => [p.id, p])); const roster = KNOWN_ROSTER.map(([id, st]) => ({ ...(POOL_BY_ID[id] || { id, n: id }), ...(keep[id] ? { note: keep[id].note, via: keep[id].via } : { note: "", via: "Yahoo" }), status: st })); return addLog({ ...s, roster, history: [snapOf(s, "Before restoring the Sept 16 roster"), ...(s.history || [])].slice(0, 12) }, "Roster restored to the Sept 16 Yahoo snapshot."); });
   const undo = () => { if (undoRef.current) { const prev = undoRef.current; update(() => prev); undoRef.current = null; } setToast(null); };
 
   // ---- derived ---------------------------------------------------------------
@@ -1671,7 +1861,7 @@ export default function App() {
       {sheet && sheet.type === "trade" && state.teams[sheet.team] && <TradeSheet team={sheet.team} theirIds={state.teams[sheet.team]} active={active} want={sheet.want} limit={ROSTER_LIMIT} onExecute={(give, get) => { executeTrade(sheet.team, give, get); setSheet(null); }} onAsk={askCoach} onClose={() => setSheet(null)} />}
       {sheet && sheet.type === "box" && <BoxSheet a={sheet.a} b={sheet.b} week={week} power={power} myLineup={lineup} myById={byId} scores={state.scores || {}} onPlayer={openPlayer} onClose={() => setSheet(null)} />}
       {sheet && sheet.type === "scores" && <ScoresSheet week={week} scores={state.scores || {}} onScore={setScore} onClose={() => setSheet(null)} teams={state.teams} myIds={active.map((p) => p.id)} myLineup={state.lineups[week] || null} />}
-      {sheet && sheet.type === "import" && <ImportSheet seen={state.txSeen || []} onApply={(mv) => { applyMoves(mv); setSheet(null); }} onClose={() => setSheet(null)} apiBase={apiBase} week={week} roster={roster} teams={state.teams} onScores={setScore}
+      {sheet && sheet.type === "import" && <ImportSheet owner={owner} seen={state.txSeen || []} onApply={(mv) => { applyMoves(mv); setSheet(null); }} onClose={() => setSheet(null)} apiBase={apiBase} week={week} roster={roster} teams={state.teams} onScores={setScore}
         onLineup={(L, irIds) => { update((s) => ({ ...s, lineups: { ...s.lineups, [week]: L }, roster: s.roster.map((p) => (irIds.includes(p.id) ? { ...p, status: "ir" } : p.status === "ir" && !irIds.includes(p.id) ? { ...p, status: "ok" } : p)) })); showToast(`Week ${week} lineup set from Yahoo.`); }}
         onPff={(reports) => { update((s) => { const u = { ...(s.pffUser || {}) }; reports.forEach((r) => { const w = r.week; u[w] = { ...(u[w] || {}) }; const cur = { ...(u[w][r.team] || (PFFG[w] && PFFG[w][r.team]) || { opp: r.opp || null, home: null }) }; const players = (r.players || []).map((x) => ({ ...x, snaps: { tot: 0, pass: 0, pblk: 0, run: 0, rblk: 0, rdef: 0, prsh: 0, cov: 0, ...(x.snaps || {}) }, g: x.g || {} })); const tot = Math.max(1, ...players.map((x) => x.snaps.tot || 0)); const wavg = (k, sk) => { const v = players.filter((x) => x.g[k] != null); const den = v.reduce((a, x) => a + (x.snaps[sk] || 0), 0); return den ? Math.round((v.reduce((a, x) => a + x.g[k] * (x.snaps[sk] || 0), 0) / den) * 10) / 10 : null; }; if (r.side === "def") cur.def = { players, unit: { def: wavg("def", "tot"), cov: wavg("cov", "cov"), prsh: wavg("prsh", "prsh"), rdef: wavg("rdef", "rdef"), press: players.reduce((a, x) => a + (x.press || 0), 0), tkl: players.reduce((a, x) => a + (x.tkl || 0), 0), mis: players.reduce((a, x) => a + (x.mis || 0), 0), tgt: players.reduce((a, x) => a + (x.tgt || 0), 0), rec: players.reduce((a, x) => a + (x.rec || 0), 0), yds: players.reduce((a, x) => a + (x.yds || 0), 0), snaps: tot } }; else { const qb = players.filter((x) => /QB/.test(x.pos || "")).sort((a, b) => b.snaps.tot - a.snaps.tot)[0]; cur.off = { players, unit: { off: wavg("off", "tot"), pblk: wavg("pblk", "pblk"), rblk: wavg("rblk", "rblk"), recv: wavg("pass", "pass"), qb: qb ? qb.n : null, qbg: qb ? qb.g.pass : null, snaps: tot, passRate: Math.round((Math.max(0, ...players.map((x) => x.snaps.pass || 0)) / tot) * 100) / 100 } }; } u[w][r.team] = cur; }); return { ...s, pffUser: u }; }); showToast(`Saved ${reports.length} PFF report${reports.length > 1 ? "s" : ""}.`); }}
         onMyRoster={(players, L, irIds, adds, drops) => { undoable((s) => { const ids = players.map((p) => p.id); const strip = (id) => { Object.keys(s.teams).forEach((t) => { s.teams[t] = s.teams[t].filter((x) => x !== id); }); }; ids.forEach(strip); const keep = Object.fromEntries(s.roster.map((p) => [p.id, p])); s.roster = players.map((p) => ({ ...(POOL_BY_ID[p.id] || p), ...(keep[p.id] ? { note: keep[p.id].note, via: keep[p.id].via } : { note: "", via: "Yahoo" }), status: irIds.includes(p.id) ? "ir" : keep[p.id] && keep[p.id].status && keep[p.id].status !== "ir" ? keep[p.id].status : "ok" })); s.lineups = { ...s.lineups, [week]: Object.keys(L).length >= 8 ? L : (s.lineups[week] || null) }; s.watch = s.watch.filter((w) => !ids.includes(w.id)); let ns = { ...s }; adds.forEach((p) => { ns = addLog(ns, `Added ${p.n} (from your Yahoo roster).`); }); drops.forEach((p) => { ns = addLog(ns, `Dropped ${p.n} (from your Yahoo roster).`); }); return ns; }, `Roster synced from Yahoo: ${adds.length} added, ${drops.length} removed.`); }}
@@ -2027,8 +2217,8 @@ function TeamView({ roster, active, irList, week, myRank, rec, results, notes, l
         </section>
         <section className="card"><div className="ch"><h2 className="cond">Recent changes</h2><span className="aux">{(history || []).length ? `${history.length} saved` : "nothing yet"}</span></div>
           {(history || []).slice(0, 6).map((h, i) => <div key={h.at} className="log"><div><span className="t">{new Date(h.at).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" })}</span><span>{h.label}</span><button className="btn sm" style={{ marginLeft: "auto" }} onClick={() => onRestore(i)}>Undo to here</button></div></div>)}
-          <div className="btns" style={{ paddingTop: 6 }}><button className="btn" onClick={onRestoreKnown}>Restore Sept 14 Yahoo roster</button><button className="btn" onClick={onImport}>Import from Yahoo</button></div>
-          <div className="hint">Every add, drop, trade, import and restore saves a snapshot first. "Undo to here" puts rosters and lineups back to just before that change. Restore Sept 14 puts your roster back to the last transactions screenshot exactly: 16 active plus Henderson and Tyson on IR, Jacobs on the exempt list.</div>
+          <div className="btns" style={{ paddingTop: 6 }}><button className="btn" onClick={onRestoreKnown}>Restore Sept 16 Yahoo roster</button><button className="btn" onClick={onImport}>Import from Yahoo</button></div>
+          <div className="hint">Every add, drop, trade, import and restore saves a snapshot first. "Undo to here" puts rosters and lineups back to just before that change. Restore Sept 16 puts your roster back to the last transactions screenshot exactly: 15 active with one open spot, Henderson and Tyson on IR, Jacobs on the exempt list.</div>
         </section>
         <div className="cols"><div className="col">
         {["QB", "RB", "TE"].map((g) => { const list = active.filter((p) => p.p === g); if (!list.length) return null; return (
@@ -2898,7 +3088,7 @@ function EdgeView({ week, vegas, vegasBusy, vegasErr, onVegas, apiBase, owner, o
 // =============================================================================
 // IMPORT (paste from Yahoo transactions)
 // =============================================================================
-function ImportSheet({ seen, onApply, onClose, apiBase, week, roster, teams, onScores, onLineup, onRoster, onMyRoster, onPff }) {
+function ImportSheet({ seen, onApply, onClose, apiBase, week, roster, teams, onScores, onLineup, onRoster, onMyRoster, onPff, owner }) {
   const [kind, setKind] = useState("myroster"); const [txt, setTxt] = useState(""); const [imgs, setImgs] = useState([]); const img = imgs[0] || null; const [sure, setSure] = useState(false); const [busy, setBusy] = useState(false); const [err, setErr] = useState(""); const [moves, setMoves] = useState(null); const [parsed, setParsed] = useState(null);
   const KINDS = [["myroster", "My roster"], ["transactions", "Transactions"], ["scores", "Scores"], ["roster", "Other team"], ["pffgrades", "PFF grades"]];
   const pickImages = (files) => { Array.from(files || []).slice(0, 4).forEach((f) => { const rd = new FileReader(); rd.onload = () => { const image = new Image(); image.onload = () => { const max = 1800; const sc = Math.min(1, max / Math.max(image.width, image.height)); const c = document.createElement("canvas"); c.width = Math.round(image.width * sc); c.height = Math.round(image.height * sc); c.getContext("2d").drawImage(image, 0, 0, c.width, c.height); setImgs((arr) => [...arr, c.toDataURL("image/jpeg", 0.85)].slice(0, 4)); }; image.src = rd.result; }; rd.readAsDataURL(f); }); };
@@ -2907,13 +3097,13 @@ function ImportSheet({ seen, onApply, onClose, apiBase, week, roster, teams, onS
     if (kind === "transactions" && txt.trim() && !img) { const mv = parseYahooTx(txt); setMoves(mv.map((m) => ({ ...m, skip: seen.includes(m.key) }))); return; }
     setBusy(true);
     try { const apiKind = kind === "myroster" ? "roster" : kind; const r = await fetch(`${apiBase}/api/parse`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ kind: apiKind, text: txt || undefined, images: imgs.length ? imgs.map((x) => x.split(",")[1]) : undefined, mediaType: "image/jpeg" }) }); const raw = await r.text(); let j; try { j = JSON.parse(raw); } catch (e) { throw new Error(r.status === 404 ? "The reader is not deployed yet (api/parse.js is missing on the server)." : `server ${r.status}: ${raw.slice(0, 120)}`); } if (!r.ok || j.error) throw new Error(j.error || `server ${r.status}`);
-      if (kind === "transactions") { const arr = Array.isArray(j.data) ? j.data : []; const mv = arr.map((x) => { const team = LEAGUE_TEAMS.find((t) => t.toLowerCase() === String(x.team || "").toLowerCase()) || ""; const to = x.to ? LEAGUE_TEAMS.find((t) => t.toLowerCase() === String(x.to).toLowerCase()) || "" : ""; const pos = String(x.pos || "").toUpperCase() === "DST" ? "DEF" : String(x.pos || "").toUpperCase(); const nfl = YT[String(x.nfl || "").toLowerCase()] || String(x.nfl || "").toUpperCase(); const player = findPlayer(x.player || "", nfl, pos); const act = x.action === "trade" ? "trade" : x.action === "drop" ? "drop" : "add"; const t2 = act === "trade" ? (to || team) : team; return { key: `${x.date || ""}|${act}|${player.id}|${t2}`, date: x.date || "", act, player, team: t2, teams: [team, to].filter(Boolean) }; }); setMoves(mv.map((m) => ({ ...m, skip: seen.includes(m.key) }))); }
+      if (kind === "transactions") { const arr = Array.isArray(j.data) ? j.data : []; const mv = arr.map((x) => { const team = LEAGUE_TEAMS.find((t) => t.toLowerCase() === String(x.team || "").toLowerCase()) || ""; const to = x.to ? LEAGUE_TEAMS.find((t) => t.toLowerCase() === String(x.to).toLowerCase()) || "" : ""; const pos = String(x.pos || "").toUpperCase() === "DST" ? "DEF" : String(x.pos || "").toUpperCase(); const nfl = YT[String(x.nfl || "").toLowerCase()] || String(x.nfl || "").toUpperCase(); const act = x.action === "trade" ? "trade" : x.action === "drop" ? "drop" : "add"; const player = resolveAbbrev(x.player || "", pos, { act, team, owned: (id) => owner[id] }) || findPlayer(x.player || "", nfl, pos); const t2 = act === "trade" ? (to || team) : team; return { key: `${x.date || ""}|${act}|${player.id}|${t2}`, date: x.date || "", act, player, team: t2, teams: [team, to].filter(Boolean) }; }); setMoves(mv.map((m) => ({ ...m, skip: seen.includes(m.key) }))); }
       else setParsed(j.data);
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
   const setMove = (i, patch) => setMoves((ms) => ms.map((m, j) => (j === i ? { ...m, ...patch, key: `${m.date}|${patch.act || m.act}|${m.player.id}|${patch.team != null ? patch.team : m.team}` } : m)));
   const ready = moves && moves.some((m) => !m.skip && m.team);
-  const matchName = (x) => { const pos = String(x.pos || "").toUpperCase() === "DST" ? "DEF" : String(x.pos || "").toUpperCase(); const nfl = YT[String(x.nfl || "").toLowerCase()] || String(x.nfl || "").toUpperCase(); return findPlayer(x.player || "", nfl, pos); };
+  const matchName = (x) => { const pos = String(x.pos || "").toUpperCase() === "DST" ? "DEF" : String(x.pos || "").toUpperCase(); const nfl = YT[String(x.nfl || "").toLowerCase()] || String(x.nfl || "").toUpperCase(); return resolveAbbrev(x.player || "", pos, { act: "add", owned: (id) => owner[id] }) || findPlayer(x.player || "", nfl, pos); };
   return (
     <Sheet title="Import from Yahoo" sub="Paste the page text or upload a screenshot. You confirm before anything changes." onClose={onClose}>
       <div className="cb" style={{ paddingTop: 2 }}><div className="seg">{KINDS.map(([k, l]) => <button key={k} className={kind === k ? "on" : ""} onClick={() => { setKind(k); setMoves(null); setParsed(null); setErr(""); }}>{l}</button>)}</div></div>
@@ -2929,11 +3119,12 @@ function ImportSheet({ seen, onApply, onClose, apiBase, week, roster, teams, onS
       </>)}
       {moves && (<>
         <div className="ssec"><span>{moves.length} move{moves.length === 1 ? "" : "s"} found</span><span>{moves.filter((m) => m.skip).length} already logged</span></div>
+        {moves.some((m) => m.player.custom && !m.skip) && <div className="prep q"><b>{moves.filter((m) => m.player.custom && !m.skip).length} player{moves.filter((m) => m.player.custom && !m.skip).length > 1 ? "s" : ""} not in the projection pool</b>: {moves.filter((m) => m.player.custom && !m.skip).map((m) => m.player.n).join(", ")}. They will be logged by name with no projection. Usually deep backups; if one is a real player, tell me and I will add him to the pool.</div>}
         {moves.length === 0 && <div className="empty">Could not find any player lines.</div>}
         <div className="card">{moves.map((m, i) => (
           <div key={i} className={"prow" + (m.skip ? " dim" : "")} style={{ gridTemplateColumns: "auto 1fr" }}>
             <Badge p={m.player} />
-            <div><div className="pname"><span className="t">{m.player.n}</span>{m.player.custom && <span className="pill own">new</span>}{m.skip && <span className="pill own">logged</span>}</div>
+            <div><div className="pname"><span className="t">{m.player.n}</span>{m.player.custom && <span className="pill d">not matched</span>}{m.skip && <span className="pill own">logged</span>}</div>
               <div className="grid2" style={{ marginTop: 6, gap: 6 }}><select value={m.act} onChange={(e) => setMove(i, { act: e.target.value })} style={{ padding: "7px 8px", fontSize: 13 }}><option value="add">Added by</option><option value="drop">Dropped by</option><option value="trade">Traded to</option></select><select value={m.team} onChange={(e) => setMove(i, { team: e.target.value })} style={{ padding: "7px 8px", fontSize: 13, borderColor: m.team ? undefined : "var(--stop)" }}><option value="">Pick a team</option>{LEAGUE_TEAMS.map((t) => <option key={t} value={t}>{t}</option>)}</select></div>
               <div className="small muted" style={{ marginTop: 4 }}>{m.date || "no date"}</div></div>
           </div>))}</div>
