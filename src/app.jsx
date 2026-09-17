@@ -1471,6 +1471,21 @@ textarea.notes,input,select{font-size:13.5px;padding:9px 11px;border-radius:10px
 .vd{font-size:10px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ink3)}
 .vd.up{color:var(--go)}
 .tbl.trend .sth,.tbl.trend .tr{grid-template-columns:minmax(0,1fr) 60px 56px 52px 56px 72px}
+.fh{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:12px var(--pad-x) 6px}
+.fh h2{margin:0;flex:none}
+.fh .aux{margin-left:auto;font-size:11px;color:var(--ink2);text-align:right}
+.fh .chev{font-size:12px;color:var(--ink3);width:14px;text-align:center}
+.card.fold.shut{padding-bottom:0}
+.fsum{padding:0 var(--pad-x) 12px;font-size:12.5px;color:var(--ink2);line-height:1.45}
+.skw .skh{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:9px var(--pad-x) 6px}
+.skw .skh .sum{margin-left:auto;font-size:11px;color:var(--ink2);text-align:right;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:60%}
+.skw .skh .chev{font-size:12px;color:var(--ink3);width:14px;text-align:center}
+.skw.shut{padding-bottom:0}
+.skg .short{display:none}
+@media (max-width:899px){.skg .full{display:none}.skg .short{display:inline;font-weight:800;letter-spacing:.04em}.skg{grid-template-columns:auto 1fr auto}}
+.jump{display:flex;gap:6px;align-items:center;flex-wrap:wrap;padding:2px 2px 10px;position:sticky;top:0;z-index:5;background:var(--bg)}
+.jump .lab{font-size:9.5px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--ink3);margin-right:2px}
+@media (min-width:900px){.jump{top:0}}
 .report{white-space:pre-wrap;font-family:var(--f);font-size:12.5px;line-height:1.5;background:var(--surface2);border-radius:12px;padding:12px 14px;margin:6px 4px 8px}
 .tgrade{font-size:22px;font-weight:900}
 .hlbox{margin:6px 4px 10px;border-radius:12px;overflow:hidden;background:var(--surface2)}
@@ -1618,6 +1633,25 @@ function SortHead({ cols, sort, dir, onSort, first }) {
   return (<div className="sth">{first && <span className="fst">{first}</span>}{cols.map(([k, l, title]) => <button key={k} className={"shb" + (sort === k ? " on" : "")} onClick={() => onSort(k)} title={title || l}>{l}<i>{sort === k ? (dir === "desc" ? "▼" : "▲") : ""}</i></button>)}</div>);
 }
 function useSort(initial, initialDir) { const [sort, setSortK] = useState(initial); const [dir, setDir] = useState(initialDir || "desc"); const onSort = (k) => { if (k === sort) setDir((d) => (d === "desc" ? "asc" : "desc")); else { setSortK(k); setDir("desc"); } }; return { sort, dir, onSort }; }
+const UI_KEY = "dimes:ui";
+let UI_OPEN = null;
+function uiLoad() { if (UI_OPEN) return UI_OPEN; try { UI_OPEN = JSON.parse((typeof localStorage !== "undefined" && localStorage.getItem(UI_KEY)) || "{}") || {}; } catch (e) { UI_OPEN = {}; } return UI_OPEN; }
+function useOpen(id, def) { const [open, setOpenRaw] = useState(() => { const u = uiLoad(); return u[id] != null ? !!u[id] : !!def; }); const setOpen = (v) => { const nv = typeof v === "function" ? v(open) : v; setOpenRaw(nv); const u = uiLoad(); u[id] = nv; try { localStorage.setItem(UI_KEY, JSON.stringify(u)); } catch (e) { /* ignore */ } }; return [open, setOpen]; }
+// A card that can fold to its one-line summary. Children render only when open.
+function Fold({ id, title, aux, summary, def, cls, children }) {
+  const [open, setOpen] = useOpen(id, def);
+  return (
+    <section className={"card fold" + (open ? " open" : " shut") + (cls ? " " + cls : "")} id={id}>
+      <button className="fh" onClick={() => setOpen((v) => !v)} aria-expanded={open}><h2 className="cond">{title}</h2><span className="aux">{aux}</span><span className="chev">{open ? "▾" : "▸"}</span></button>
+      {!open && summary && <div className="fsum">{summary}</div>}
+      {open && children}
+    </section>
+  );
+}
+function JumpBar({ items }) {
+  const go = (id) => { const el = document.getElementById(id); if (!el) return; const y = el.getBoundingClientRect().top + window.scrollY - 110; window.scrollTo({ top: y, behavior: "smooth" }); };
+  return <div className="jump"><span className="lab">Jump</span>{items.map(([id, l]) => <button key={id} className="chip sm" onClick={() => go(id)}>{l}</button>)}</div>;
+}
 function TeamMark({ team, size }) {
   const st = LEAGUE_STYLE[team] || { bg: "#5A657D", fg: "#fff", mono: (team || "?").slice(0, 3).toUpperCase() };
   const sz = size || 34;
@@ -2056,8 +2090,8 @@ function VegasCard({ week, vegas, busy, err, onPull, lineup, byId, apiBase }) {
   const [showAll, setShowAll] = useState(false);
   const shown = showAll ? games : games.filter((g) => teams.has(g.home) || teams.has(g.away) || nflScore(g.home, g.away));
   return (
-    <section className="card">
-      <div className="ch"><h2 className="cond">NFL board</h2><span className="aux">{fresh ? `Vegas ${age < 1 ? "<1" : age}h old${NFLSC && NFLSC.week === week ? `, scores ${timeAgo(NFLSC.at)}` : ""}` : "lines not pulled"}</span></div>
+    <Fold id="board" title="NFL board" def={true} summary={fresh ? `${games.length} games on the board${NFLSC && NFLSC.week === week ? `, ${(NFLSC.games || []).filter((g) => g.done).length} final` : ""}.` : "Pull the lines to see the board."} aux={fresh ? `Vegas ${age < 1 ? "<1" : age}h old${NFLSC && NFLSC.week === week ? `, scores ${timeAgo(NFLSC.at)}` : ""}` : "lines not pulled"}>
+      <div className="ch" style={{ display: "none" }}><h2 className="cond">NFL board</h2><span className="aux">{fresh ? `Vegas ${age < 1 ? "<1" : age}h old${NFLSC && NFLSC.week === week ? `, scores ${timeAgo(NFLSC.at)}` : ""}` : "lines not pulled"}</span></div>
       {err && <div className="hint" style={{ color: "var(--stop)", paddingTop: 0 }}>{err}</div>}
       {!fresh && <div className="hint" style={{ paddingTop: 0 }}>Pull the week's lines to see every game with its Vegas projection, then live scores and results here as they happen.</div>}
       {fresh && shown.map((g) => { const sc = nflScore(g.home, g.away); const live = sc && sc.state === "in"; const done = sc && sc.done; const fav = g.spreadHome == null ? null : g.spreadHome < 0 ? g.home : g.spreadHome > 0 ? g.away : null;
@@ -2071,7 +2105,7 @@ function VegasCard({ week, vegas, busy, err, onPull, lineup, byId, apiBase }) {
           </div>); })}
       {fresh && <div className="btns"><button className="btn sm" onClick={() => setShowAll((v) => !v)}>{showAll ? "Just my games" : `All ${games.length} games`}</button><button className="btn sm" onClick={() => onPull(!fresh)} disabled={busy}>{busy ? "Pulling" : "Refresh lines"}</button></div>}
       {!fresh && <div className="btns"><button className="btn pri sm" onClick={() => onPull(true)} disabled={busy}>{busy ? "Pulling" : "Pull this week's lines"}</button></div>}
-    </section>
+    </Fold>
   );
 }
 const CHECKLIST = [
@@ -2133,9 +2167,9 @@ function Checklist({ week, done, onToggle, ctx, onImport, onSources }) {
   const items = CHECKLIST.map((it) => ({ ...it, auto: it.auto ? !!it.auto(ctx) : null, checked: it.auto ? !!it.auto(ctx) : !!done[it.id] }));
   const n = items.filter((i) => i.checked).length;
   const days = [...new Set(items.map((i) => i.day))];
-  const [open, setOpen] = useState(n < items.length);
+  const [open, setOpen] = useOpen("inputs", n < items.length * 0.8);
   return (
-    <section className="card"><div className="ch"><h2 className="cond">Week {week} inputs</h2><span className="aux"><span className="muted">{n} of {items.length}</span> <button className="lnk" onClick={() => setOpen((v) => !v)}>{open ? "collapse" : "expand"}</button></span></div>
+    <section className="card" id="inputs"><button className="fh" onClick={() => setOpen((v) => !v)}><h2 className="cond">Week {week} inputs</h2><span className="aux">{n} of {items.length}</span><span className="chev">{open ? "▾" : "▸"}</span></button>
       <div className="prog"><i style={{ width: `${Math.round((n / items.length) * 100)}%` }} /></div>
       <div className="btns" style={{ paddingTop: 4, paddingBottom: 4 }}><button className="btn sm pri" onClick={onImport}>Import from Yahoo</button><button className="btn sm" onClick={onSources}>Add weekly sources</button></div>
       {open && days.map((d) => (<div key={d} className="ckday"><div className="ckd">{d}</div>{items.filter((i) => i.day === d).map((i) => (
@@ -2154,7 +2188,7 @@ function HomeView({ week, actions, lineup, isSaved, byId, bench, irList, myTotal
   const tot = myTotal + (opp ? opp.total : 0) || 1; const edge = opp ? myTotal - opp.total : 0;
   return (
     <div className="cols"><div className="col">
-      <section className="card">
+      <section className="card" id="actions">
         <div className="ch"><h2 className="cond">Before kickoff</h2><span className="aux">{actions.length ? `${actions.length} to look at` : ""}</span></div>
         {actions.length === 0 ? <div className="allgood"><span className="ic">✓</span><span>You are set. Nobody on bye, nobody flagged, projections agree with your lineup.</span></div>
           : actions.map((a, i) => <button key={i} className={"act " + a.lvl} style={{ animationDelay: `${i * 45}ms` }} onClick={a.do}><span className="ic cond">{a.lvl === "bad" ? "!" : a.lvl === "warn" ? "?" : "i"}</span><span className="tx">{a.text}<small>{a.sub}</small></span><span className="go">{a.go}</span></button>)}
@@ -2172,11 +2206,12 @@ function HomeView({ week, actions, lineup, isSaved, byId, bench, irList, myTotal
         </>) : <div className="edge">Playoff opponent is not set yet.</div>}
       </section>
 
+      <JumpBar items={[["actions", "Actions"], ["board", "NFL board"], ["inputs", "Inputs"], ["lineup", "Lineup"], ["bench", "Bench"]]} />
       <Recap week={week} lineup={lineup} byId={byId} bench={bench} scores={scores} oppName={oppName} onPlayer={onPlayer} onReport={onReport} />
       <Checklist week={week} done={checklist} onToggle={onCheck} ctx={{ week, vegas, saved: isSaved, scores }} onImport={onImport} onSources={onSources} />
       <VegasCard week={week} vegas={vegas} busy={vegasBusy} err={vegasErr} onPull={onVegas} lineup={lineup} byId={byId} apiBase={apiBase} />
     </div><div className="col">
-      <section className="card">
+      <section className="card" id="lineup">
         <div className="ch"><h2 className="cond">Lineup</h2><span className={"pill " + (isSaved ? "set" : "auto")}>{isSaved ? "Set by you" : "Auto"}</span></div>
         {SLOTS.map((s, i) => { const p = lineup[s.k] ? byId[lineup[s.k]] : null; const m = p ? matchup(p.t, week) : null; const warn = p && (m.bye || p.status === "o" || p.status === "d");
           return p ? <PRow key={s.k} p={p} week={week} badge={<Badge slot={s.label} p={p} />} cls={warn ? "warn" : ""} onClick={() => onSlot(s.k)} right={<><Val p={p} week={week} /><span className="chev">›</span></>} idx={i} />
@@ -2189,7 +2224,7 @@ function HomeView({ week, actions, lineup, isSaved, byId, bench, irList, myTotal
         <div className="score"><div><label>Dimes</label><input inputMode="decimal" placeholder="0.0" value={res.my} onChange={(e) => onResult("my", e.target.value)} aria-label="My score" /></div><div className={"res cond " + result}>{result || "vs"}</div><div><label>Them</label><input inputMode="decimal" placeholder="0.0" value={res.opp} onChange={(e) => onResult("opp", e.target.value)} aria-label="Opponent score" /></div></div>
       </section>
 
-      <section className="card">
+      <section className="card" id="bench">
         <div className="ch"><h2 className="cond">Bench</h2><span className="aux">{bench.length} players</span></div>
         {bench.length === 0 && <div className="empty">Everybody is starting.</div>}
         {bench.map((p, i) => <PRow key={p.id} p={p} week={week} onClick={() => onPlayer(p.id)} right={<><Val p={p} week={week} /><span className="chev">›</span></>} idx={i} />)}
@@ -2428,11 +2463,11 @@ function TeamView({ roster, active, irList, week, myRank, rec, results, notes, l
           {myRank && <div className="hint" style={{ paddingTop: 0 }}>Best lineup projects {fmt1(myRank.total)} per week, #{myRank.rank} of 14.{HEALTH && HEALTH.at ? ` Injury designations synced from the official report ${new Date(HEALTH.at).toLocaleString("en-US", { weekday: "short", hour: "numeric" })}.` : " Injury sync needs the web version or the lines server."}</div>}
 
         </section>
-        <section className="card"><div className="ch"><h2 className="cond">Recent changes</h2><span className="aux">{(history || []).length ? `${history.length} saved` : "nothing yet"}</span></div>
+        <Fold id="changes" title="Recent changes" def={false} aux={(history || []).length ? `${history.length} saved` : "nothing yet"} summary={(history || []).length ? `Last change: ${history[0].label}. Undo and restore live inside.` : "Every add, drop, import and restore saves a snapshot you can undo."}>
           {(history || []).slice(0, 6).map((h, i) => <div key={h.at} className="log"><div><span className="t">{new Date(h.at).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" })}</span><span>{h.label}</span><button className="btn sm" style={{ marginLeft: "auto" }} onClick={() => onRestore(i)}>Undo to here</button></div></div>)}
           <div className="btns" style={{ paddingTop: 6 }}><button className="btn" onClick={onRestoreKnown}>Restore Sept 16 Yahoo roster</button><button className="btn" onClick={onImport}>Import from Yahoo</button></div>
           <div className="hint">Every add, drop, trade, import and restore saves a snapshot first. "Undo to here" puts rosters and lineups back to just before that change. Restore Sept 16 puts your roster back to the last transactions screenshot exactly: 15 active with one open spot, Henderson and Tyson on IR, Jacobs on the exempt list.</div>
-        </section>
+        </Fold>
         <div className="cols"><div className="col">
         {["QB", "RB", "TE"].map((g) => { const list = active.filter((p) => p.p === g); if (!list.length) return null; return (
           <section className="card" key={g}><div className="ch"><h2 className="cond">{g}</h2><span className="aux">{list.length}</span></div>
@@ -2668,6 +2703,10 @@ function MatchupView({ week, lineup, byId, bench, opp, oppName, myLive, onPlayer
     </div></div>
   );
 }
+function WeekFold({ w, week, summary, children }) {
+  const [open, setOpen] = useOpen("sched-w" + w, w === week);
+  return (<div className={"skw" + (w === week ? " now" : "") + (open ? "" : " shut")}><button className="skh" onClick={() => setOpen((v) => !v)}><b>Week {w}</b>{w === RIVALRY_WEEK ? <span className="pill own">Rivalry</span> : null}{w === week ? <span className="pill me">This week</span> : null}<span className="sum">{summary}</span><span className="chev">{open ? "▾" : "▸"}</span></button>{open && children}</div>);
+}
 function ScheduleView({ week, scores, standings, sim, power, playoffTeams, onTeam, onBox }) {
   const [mode, setMode] = useState("week"); const [team, setTeam] = useState(ME);
   const proj = (t, w) => { const r = power.find((x) => x.team === t); if (!r) return null; const L = teamLineupFor(t, r.players, w).L; return lineupTotal(L, r.byId, w); };
@@ -2679,11 +2718,11 @@ function ScheduleView({ week, scores, standings, sim, power, playoffTeams, onTea
     <div className="cols lead"><div className="col">
       <section className="card"><div className="ch"><h2 className="cond">Schedule</h2><span className="aux"><button className={"chip sm" + (mode === "week" ? " on" : "")} onClick={() => setMode("week")}>By week</button> <button className={"chip sm" + (mode === "team" ? " on" : "")} onClick={() => setMode("team")}>By team</button></span></div>
         {mode === "team" && <div className="cb" style={{ paddingTop: 2, paddingBottom: 6 }}><select value={team} onChange={(e) => setTeam(e.target.value)} style={{ width: "100%" }}>{LEAGUE_TEAMS.map((t) => <option key={t} value={t}>{t}</option>)}</select></div>}
-        {mode === "week" && weeks.map((w) => { const done = new Set(); const games = []; LEAGUE_TEAMS.forEach((a) => { const b = LSCHED[w][a]; if (done.has(a)) return; done.add(a); done.add(b); games.push([a, b]); }); return (
-          <div key={w} className={"skw" + (w === week ? " now" : "")}><div className="skh"><b>Week {w}</b>{w === RIVALRY_WEEK ? <span className="pill own">Rivalry</span> : null}{w === week ? <span className="pill me">This week</span> : null}</div>
+        {mode === "week" && weeks.map((w) => { const done = new Set(); const games = []; LEAGUE_TEAMS.forEach((a) => { const b = LSCHED[w][a]; if (done.has(a)) return; done.add(a); done.add(b); games.push([a, b]); }); const my = LSCHED[w][ME]; const sm = scores[w] && scores[w][ME], so = scores[w] && scores[w][my]; const fin = sm != null && so != null; const nFin = games.filter(([a, b]) => scores[w] && scores[w][a] != null && scores[w][b] != null).length; const summary = fin ? `You ${parseFloat(sm) > parseFloat(so) ? "beat" : parseFloat(sm) < parseFloat(so) ? "lost to" : "tied"} ${my} ${sm} to ${so}. ${nFin} of ${games.length} games final.` : `vs ${my}${w === RIVALRY_WEEK ? " (rivalry)" : ""}, ${fmt1(proj(ME, w) || 0)} to ${fmt1(proj(my, w) || 0)} projected.`; return (
+          <WeekFold key={w} w={w} week={week} summary={summary} games={games}>
             {games.map(([a, b]) => { const sa = scores[w] && scores[w][a], sb = scores[w] && scores[w][b]; const fin = sa != null && sb != null; const pa = fin ? null : proj(a, w), pb = fin ? null : proj(b, w); const aw = fin ? parseFloat(sa) > parseFloat(sb) : pa != null && pb != null && pa > pb; return (
-              <button key={a} className={"skg" + (a === ME || b === ME ? " mine" : "")} onClick={() => onBox(a, b)}><span className={"t" + (aw ? " w" : "")}><TeamMark team={a} size={20} />{a}</span><span className="sc cond">{fin ? `${sa} – ${sb}` : pa != null && pb != null ? <span className="proj">{fmt1(pa)} – {fmt1(pb)}</span> : "–"}</span><span className={"t r" + (!aw && (fin || (pa != null && pb != null)) ? " w" : "")}>{b}<TeamMark team={b} size={20} /></span></button>); })}
-          </div>); })}
+              <button key={a} className={"skg" + (a === ME || b === ME ? " mine" : "")} onClick={() => onBox(a, b)}><span className={"t" + (aw ? " w" : "")}><TeamMark team={a} size={20} /><span className="full">{a}</span><span className="short">{(LEAGUE_STYLE[a] || {}).mono || a.slice(0, 4)}</span></span><span className="sc cond">{fin ? `${sa} – ${sb}` : pa != null && pb != null ? <span className="proj">{fmt1(pa)} – {fmt1(pb)}</span> : "–"}</span><span className={"t r" + (!aw && (fin || (pa != null && pb != null)) ? " w" : "")}><span className="full">{b}</span><span className="short">{(LEAGUE_STYLE[b] || {}).mono || b.slice(0, 4)}</span><TeamMark team={b} size={20} /></span></button>); })}
+          </WeekFold>); })}
         {mode === "team" && weeks.map((w) => { const o = LSCHED[w][team]; const st = scores[w] && scores[w][team], so = scores[w] && scores[w][o]; const fin = st != null && so != null; const pt = fin ? null : proj(team, w), po = fin ? null : proj(o, w); const res = fin ? (parseFloat(st) > parseFloat(so) ? "W" : parseFloat(st) < parseFloat(so) ? "L" : "T") : null; return (
           <button key={w} className={"skg" + (w === week ? " mine" : "")} onClick={() => onBox(team, o)}><span className="t"><b style={{ width: 28, display: "inline-block", color: "var(--ink3)" }}>W{w}</b><TeamMark team={o} size={20} />{o}</span><span className="sc cond">{fin ? <><span className={"pill " + (res === "W" ? "up" : res === "L" ? "d" : "own")}>{res}</span> {st} – {so}</> : pt != null && po != null ? <span className="proj">{fmt1(pt)} – {fmt1(po)}</span> : "–"}</span><span /></button>); })}
         <div className="hint">Scores are Yahoo finals you have entered; gray pairs are projections from each team's lineup. Tap any game for its box score.</div>
@@ -2711,7 +2750,8 @@ function LeagueView({ week, power, standings, sim, scores, owner, playoffTeams, 
   const leaders = useMemo(() => POOL.filter((p) => p.p === posTab && hasProj(p)).sort((a, b) => pw(b) - pw(a)).slice(0, 12), [posTab]);
   return (
     <div className="cols lead"><div className="col">
-      <section className="card st"><div className="ch"><h2 className="cond">Standings</h2><span className="aux">{played ? `${played} games in` : "season not started"}</span></div>
+      <JumpBar items={[["standings", "Standings"], ["matchups", "Matchups"], ["power", "Power"], ["stand", "Where you stand"], ["leaders", "Leaders"]]} />
+      <section className="card st" id="standings"><div className="ch"><h2 className="cond">Standings</h2><span className="aux">{played ? `${played} games in` : "season not started"}</span></div>
         <div className="sthead"><span>#</span><span>Team</span><span>W-L</span><span>Avg PF</span><span className="pa">Avg PA</span><span>Playoffs</span></div>
         {standings.map((x) => { const o = sim ? sim[x.team] : null; return (
           <button key={x.team} className={"strow" + (x.team === ME ? " mine" : "")} onClick={() => x.team !== ME && onTeam(x.team)}>
@@ -2726,7 +2766,7 @@ function LeagueView({ week, power, standings, sim, scores, owner, playoffTeams, 
         <div className="hint">{played ? "Playoff odds from 2,500 simulated seasons of the remaining schedule, using each team's projected lineup." : "Preseason odds: everyone is 0-0, so these come entirely from projected roster strength and the schedule. Results take over as games are played."} Top {playoffTeams} make it, points-for breaks ties.</div>
       </section>
 
-      <section className="card pr"><div className="ch"><h2 className="cond">Power rankings</h2><span className="aux">best lineup, per week</span></div>
+      <Fold id="power" title="Power rankings" aux="best lineup, per week" def={false} cls="pr" summary={(() => { const me = power.find((r) => r.team === ME); return me ? `You are #${me.rank} of 14 at ${fmt1(me.total)} per week. #1 is ${power[0].team} at ${fmt1(power[0].total)}.` : ""; })()}>
         {power.map((r) => { const o = sim ? sim[r.team] : null; return (
           <button key={r.team} className={"prow tap rowbtn" + (r.team === ME ? " mine" : "")} onClick={() => r.team !== ME && onTeam(r.team)}>
             <span className="rk cond">{r.rank}</span>
@@ -2734,9 +2774,9 @@ function LeagueView({ week, power, standings, sim, scores, owner, playoffTeams, 
             <span className="pright"><span className="val cond"><div className="n">{fmt1(r.total)}</div>{o && <div className="l">{o.expW.toFixed(1)} exp wins</div>}</span>{r.team !== ME && <span className="chev">›</span>}</span>
           </button>); })}
         <div className="hint">Each team's best lineup from the blended projections, byes ignored. Bars are position strength vs the league. Tap a team to scout or build a trade.</div>
-      </section>
+      </Fold>
     </div><div className="col">
-      <section className="card"><div className="ch"><h2 className="cond">Week {week} matchups</h2><span className="aux">projected</span></div>
+      <section className="card" id="matchups"><div className="ch"><h2 className="cond">Week {week} matchups</h2><span className="aux">projected</span></div>
         {matchups.length === 0 && <div className="empty">Playoff matchups depend on seeding.</div>}
         {matchups.map((m) => { const fin = m.sa != null && m.sb != null; const aWin = fin ? parseFloat(m.sa) > parseFloat(m.sb) : m.wp >= 0.5; return (
           <button key={m.a} className={"mu2 tap" + (m.a === ME || m.b === ME ? " mine" : "")} onClick={() => onBox(m.a, m.b)}>
@@ -2751,13 +2791,13 @@ function LeagueView({ week, power, standings, sim, scores, owner, playoffTeams, 
           {rows.map(({ p, lv }, i) => { const o = owner[p.id]; return <PRow key={p.id} p={p} week={week} onClick={() => onPlayer(p.id)} sub={lv.line} right={<><span className={"pill " + (o === ME ? "me" : o ? "own" : "up")}>{o === ME ? "Dimes" : o ? o : "FA"}</span><Val p={p} week={week} /></>} idx={i} />; })}
           <div className="hint">Points on Yahoo half-PPR scoring from ESPN's live box scores, refreshed every minute while games are on. Kicker distances are approximated; defenses count sacks, takeaways, touchdowns and points allowed.</div>
         </section>); })()}
-      <section className="card"><div className="ch"><h2 className="cond">Where you stand</h2><span className="aux">avg starter vs league</span></div>
+      <Fold id="stand" title="Where you stand" def={false} summary="Gaps to the teams above and below you, by position." aux={`avg starter vs league`}>
         <div className="stats">{needs.slice().sort((a, b) => POS_ORDER[a.pos] - POS_ORDER[b.pos]).map((n) => <div key={n.pos} className="stat"><div className={"v cond " + (n.gap >= 0 ? "up" : "dn")}>{signed(n.gap)}</div><div className="k">{n.pos}, avg {fmt1(n.avg)}</div></div>)}</div>
-      </section>
-      <section className="card"><div className="ch"><h2 className="cond">Position leaders</h2><span className="aux">season value, league-wide</span></div>
+      </Fold>
+      <Fold id="leaders" title="Position leaders" def={false} summary="Top 12 at each position, league-wide." aux={`season value, league-wide`}>
         <div className="cb" style={{ paddingTop: 2, paddingBottom: 6 }}><div className="chips">{POS_LIST.map((g) => <button key={g} className={"chip" + (posTab === g ? " on" : "")} onClick={() => setPosTab(g)}>{g}</button>)}</div></div>
         {leaders.map((p, i) => { const own = owner[p.id]; return <PRow key={p.id} p={p} week={week} onClick={() => onPlayer(p.id)} sub={own ? (own === ME ? "yours" : own) : "free agent"} right={<><span className={"pill " + (own === ME ? "me" : own ? "own" : "up")}>{own === ME ? "Dimes" : own ? "owned" : "FA"}</span><Val p={p} label="per wk" /></>} idx={i} />; })}
-      </section>
+      </Fold>
     </div></div>
   );
 }
@@ -3243,7 +3283,7 @@ function picksFrom(priced, games) {
 }
 function gradePick(pk, week) { const p = POOL_BY_ID[pk.id]; if (!p) return null; const u = usageOf(p); const r = u && u.wk[week]; if (!r) return null; const stat = pk.field === "pass_yds" ? r.py : pk.field === "rush_yds" ? r.ry : pk.field === "rec_yds" ? r.recy : pk.field === "rec" ? r.rec : pk.field === "atd" ? (p.p === "QB" ? null : r.td) : pk.field === "pass_tds" ? null : null; if (stat == null) return null; if (pk.field === "atd") return { stat, res: stat > 0 ? "W" : "L" }; const line = parseFloat(pk.line); if (isNaN(line)) return null; const res = stat === line ? "P" : pk.side === "Over" ? (stat > line ? "W" : "L") : (stat < line ? "W" : "L"); return { stat, res }; }
 function TrendsPanel({ games, week }) {
-  const [open, setOpen] = useState(true); const [win, setWin] = useState("recent"); const [team, setTeam] = useState(games[0] ? games[0].home : "BUF"); const [tab, setTab] = useState("angles");
+  const [open, setOpen] = useOpen("trends", false); const [win, setWin] = useState("recent"); const [team, setTeam] = useState(games[0] ? games[0].home : "BUF"); const [tab, setTab] = useState("angles");
   const winLabel = win === "recent" ? "since 2023" : "since 2010";
   const angles = useMemo(() => games.map((g) => ({ g, sides: [g.away, g.home].map((t) => ({ t, keys: splitKeysFor(g, t), hits: notableSplits(t, splitKeysFor(g, t), win).slice(0, 2) })) })), [games, win]);
   const sats = useMemo(() => seasonAts(), [VHIST && Object.keys(VHIST).length, NFLSC && NFLSC.at]);
@@ -3253,7 +3293,7 @@ function TrendsPanel({ games, week }) {
   const verdict = (z, pct) => (z == null ? "" : Math.abs(z) >= 2 ? "real signal" : Math.abs(z) >= 1.3 || (pct != null && (pct >= 62 || pct <= 38)) ? "worth a look" : "priced in");
   const pvRows = Object.values(pvl).sort((a, b) => b.n - a.n || Math.abs(b.o - b.u) - Math.abs(a.o - a.u)).slice(0, 20);
   return (
-    <section className="card"><div className="ch"><h2 className="cond">Trends</h2><span className="aux"><button className="lnk" onClick={() => setOpen((v) => !v)}>{open ? "collapse" : "expand"}</button></span></div>
+    <section className="card" id="trends"><button className="fh" onClick={() => setOpen((v) => !v)}><h2 className="cond">Trends</h2><span className="aux">history, splits, players vs the number</span><span className="chev">{open ? "▾" : "▸"}</span></button>
       {open && <>
         <div className="cb" style={{ paddingTop: 2, paddingBottom: 6 }}><div className="chips">{[["angles", "This week's angles"], ["team", "Team explorer"], ["systems", "League systems"], ["players", "Players vs the number"]].map(([k, l]) => <button key={k} className={"chip" + (tab === k ? " on" : "")} onClick={() => setTab(k)}>{l}</button>)}</div>
           {(tab === "angles" || tab === "team" || tab === "systems") && <div className="sortrow"><span className="lab">Window</span>{[["recent", "Since 2023"], ["all", "Since 2010"]].map(([k, l]) => <button key={k} className={"chip" + (win === k ? " on" : "")} onClick={() => setWin(k)}>{l}</button>)}</div>}</div>
@@ -3285,19 +3325,19 @@ function TrackRecord({ picksLog }) {
   const byTier = {}; graded.forEach((r) => { const t = r.tier || "Watch"; byTier[t] = byTier[t] || { n: 0, w: 0, u: 0 }; byTier[t].n++; if (r.g.res === "W") byTier[t].w++; byTier[t].u += units(r); });
   const tot = graded.reduce((a, r) => a + units(r), 0);
   return (
-    <section className="card"><div className="ch"><h2 className="cond">Track record</h2><span className="aux">{graded.length} graded of {rows.length} picks</span></div>
+    <Fold id="record" title="Track record" def={false} aux={`${graded.length} graded of ${rows.length} picks`} summary={graded.length ? `${Math.round((graded.filter((r) => r.g.res === "W").length / graded.length) * 100)}% hit rate, ${signed(Math.round(tot * 100) / 100)}u at a flat unit.` : "Picks are graded once the week's box scores post."}>
       {graded.length > 0 && <div className="stats" style={{ gridTemplateColumns: "repeat(3,1fr)" }}><div className="stat"><div className="v cond">{Math.round((graded.filter((r) => r.g.res === "W").length / graded.length) * 100)}%</div><div className="k">hit rate</div></div><div className="stat"><div className={"v cond " + (tot >= 0 ? "up" : "dn")}>{signed(Math.round(tot * 100) / 100)}u</div><div className="k">flat 1u per pick</div></div><div className="stat"><div className="v cond">{Math.round((graded.reduce((a, r) => a + r.pWin, 0) / graded.length) * 100)}%</div><div className="k">avg model chance</div></div></div>}
       {Object.keys(byTier).length > 0 && <div className="hint" style={{ paddingTop: 0 }}>{Object.keys(byTier).map((t) => `${t}: ${byTier[t].w}-${byTier[t].n - byTier[t].w}, ${signed(Math.round(byTier[t].u * 100) / 100)}u`).join(" · ")}</div>}
       {rows.slice(-12).reverse().map((r, i) => <div key={r.key + r.mk + r.week + i} className="prow" style={{ gridTemplateColumns: "auto 1fr auto" }}><Badge p={POOL_BY_ID[r.id]} /><span><span className="pname"><span className="t">{r.n} {r.side} {r.line}</span>{r.tier && <span className={"pill tier " + r.tier.toLowerCase()}>{r.tier}</span>}</span><span className="psub">Week {r.week}, {r.mk}, {fmtPrice(r.price)}{r.g ? `, actual ${r.g.stat}` : ", not graded yet"}</span></span><span className={"pill " + (r.g ? (r.g.res === "W" ? "up" : r.g.res === "L" ? "d" : "own") : "own")}>{r.g ? r.g.res : "–"}</span></div>)}
       <div className="hint">Best plays are logged on every pull and graded against the box score once the week's stats post. Hit rate and units by tier are the honest test of the model; a good model shows Strong beating Good beating Lean over time.</div>
-    </section>
+    </Fold>
   );
 }
 function EdgeView({ week, vegas, vegasBusy, vegasErr, onVegas, apiBase, owner, onPlayer, roster, oppName, oppIds, bankroll, bets, onLogBet, onSettle, onRemove, slip, onAddLeg, onRemoveLeg, onClearSlip, picksLog }) {
   const fresh = vegasFresh(week);
   const [mk, setMk] = useState("ALL"); const [mineOnly, setMineOnly] = useState(false); const [showAll, setShowAll] = useState(false); const [help, setHelp] = useState(false);
   const [sel, setSel] = useState(() => new Set());
-  const [gamesOpen, setGamesOpen] = useState(true); const [playsOpen, setPlaysOpen] = useState(true); const [gSort, setGSort] = useState("kick"); const [pSort, setPSort] = useState("edge");
+  const [gamesOpen, setGamesOpen] = useOpen("games", true); const [playsOpen, setPlaysOpen] = useOpen("plays", false); const [gSort, setGSort] = useState("kick"); const [pSort, setPSort] = useState("edge");
   const toggleSel = (id) => setSel((s0) => { const n = new Set(s0); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const pricedAll = useMemo(() => priceProps(week, owner, bankroll), [vegas, week, owner, bankroll]);
   const games = fresh ? [...vegas.games].sort((a, b) => new Date(a.commence) - new Date(b.commence)) : [];
@@ -3325,8 +3365,9 @@ function EdgeView({ week, vegas, vegasBusy, vegasErr, onVegas, apiBase, owner, o
       {vegasErr && <div className="hint" style={{ color: "var(--stop)", padding: "0 4px 10px" }}>{vegasErr}</div>}
 
 
+      <JumpBar items={[["picks", "Best plays"], ["games", "Games"], ["plays", "All plays"], ["trends", "Trends"], ["record", "Record"]]} />
       {fresh && (
-        <section className="card picks"><div className="ch"><h2 className="cond">Best plays</h2><span className="aux">{selGames.length ? `${selGames.length} game${selGames.length > 1 ? "s" : ""} selected` : "this week"}</span></div>
+        <section className="card picks" id="picks"><div className="ch"><h2 className="cond">Best plays</h2><span className="aux">{selGames.length ? `${selGames.length} game${selGames.length > 1 ? "s" : ""} selected` : "this week"}</span></div>
           {picks.length === 0 && <div className="empty">No props with a price at {MY_BOOKS.join(" or ")} yet. Pull again once FanDuel posts the week's props (usually Tuesday evening).</div>}
           {picks.map((e, i) => { const t = tierOf(e); const ep = edgePts(e); return (
             <div key={e.key + e.mk} className="pick">
@@ -3339,7 +3380,7 @@ function EdgeView({ week, vegas, vegasBusy, vegasErr, onVegas, apiBase, owner, o
 
       <SlipPanel slip={slip} bankroll={bankroll} onRemoveLeg={onRemoveLeg} onClear={onClearSlip} onLogBet={onLogBet} week={week} />
 
-      <section className="card"><div className="ch"><h2 className="cond">Games</h2><span className="aux">{fresh ? <>{sel.size ? <><button className="lnk" onClick={() => setSel(new Set())}>clear {sel.size}</button> </> : null}<button className="lnk" onClick={() => setGamesOpen((v) => !v)}>{gamesOpen ? "collapse" : "expand"}</button></> : ""}</span></div>
+      <section className="card" id="games"><button className="fh" onClick={() => setGamesOpen((v) => !v)}><h2 className="cond">Games</h2><span className="aux">{fresh ? `${games.length} on the board${sel.size ? `, ${sel.size} selected` : ""}` : ""}</span><span className="chev">{gamesOpen ? "▾" : "▸"}</span></button>{fresh && sel.size > 0 && gamesOpen && <div className="cb" style={{ paddingTop: 0 }}><button className="lnk" onClick={() => setSel(new Set())}>clear selection</button></div>}
         {!fresh && <div className="empty">Pull the lines to see projected scores, win chances, weather and the best price at each book.</div>}
         {fresh && gamesOpen && <div className="cb" style={{ paddingTop: 2, paddingBottom: 6 }}><div className="chips">{[["kick", "Kickoff"], ["gap", "Biggest gap"], ["total", "Highest total"], ["edge", "Best line"], ["mine", "My players"]].map(([k, l]) => <button key={k} className={"chip" + (gSort === k ? " on" : "")} onClick={() => setGSort(k)}>{l}</button>)}</div></div>}
         {fresh && gamesOpen && <div className="ggrid">{sortedGames.map((g) => <GameCard key={g.id} g={g} week={week} roster={roster} oppIds={oppIds} oppName={oppName} onAddLeg={onAddLeg} selected={sel.has(g.id)} onToggle={() => toggleSel(g.id)} dim={sel.size > 0 && !sel.has(g.id)} />)}</div>}
@@ -3347,7 +3388,7 @@ function EdgeView({ week, vegas, vegasBusy, vegasErr, onVegas, apiBase, owner, o
         {fresh && gamesOpen && <div className="hint">Scores are Vegas, from the total and spread. Front Office proj is our own Fantasy Index plus PFF stat lines added up by team. Where they disagree by 3 or more, the card is highlighted; that is where to look first.</div>}
       </section>
 
-      <section className="card"><div className="ch"><h2 className="cond">All plays</h2><span className="aux">{fresh ? <><span className="muted">{listed.length} shown</span> <button className="lnk" onClick={() => setPlaysOpen((v) => !v)}>{playsOpen ? "collapse" : "expand"}</button></> : ""}</span></div>
+      <section className="card" id="plays"><button className="fh" onClick={() => setPlaysOpen((v) => !v)}><h2 className="cond">All plays</h2><span className="aux">{fresh ? `${listed.length} shown` : ""}</span><span className="chev">{playsOpen ? "▾" : "▸"}</span></button>
         {!fresh && <div className="empty">Pull the lines with props first.</div>}
         {fresh && playsOpen && <div className="cb" style={{ paddingTop: 2, paddingBottom: 6 }}><div className="chips">{["ALL", "Pass yds", "Pass TD", "Rush yds", "Rec", "Rec yds", "Anytime TD"].map((x) => <button key={x} className={"chip" + (mk === x ? " on" : "")} onClick={() => setMk(x)}>{x === "ALL" ? "All" : x}</button>)}<button className={"chip hl" + (mineOnly ? " on" : "")} onClick={() => setMineOnly((v) => !v)}>My players</button><button className={"chip" + (showAll ? " on" : "")} onClick={() => setShowAll((v) => !v)}>{showAll ? "Everything" : "With an edge"}</button></div>
           <div className="sortrow"><span className="lab">Sort</span>{[["edge", "Biggest edge"], ["ret", "Best return"], ["kick", "Kickoff"], ["name", "Player"]].map(([k, l]) => <button key={k} className={"chip" + (pSort === k ? " on" : "")} onClick={() => setPSort(k)}>{l}</button>)}</div></div>}
