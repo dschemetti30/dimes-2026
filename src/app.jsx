@@ -1566,7 +1566,7 @@ textarea.notes,input,select{font-size:13.5px;padding:9px 11px;border-radius:10px
 @media (max-width:899px){.wk{width:52px;height:54px;border-radius:12px}.wk .n{font-size:16px}}
 
 /* ===================== Player card v2 ===================== */
-.pc{padding:0 12px 6px}
+.pcard{padding:0 12px 6px;white-space:normal}
 .pcid{display:flex;gap:12px;align-items:center;padding:2px 2px 10px}
 .pcid .hsh{width:64px;height:64px;border-radius:14px;flex:none;background:var(--surface2)}
 .pcmeta{min-width:0;flex:1}
@@ -1574,9 +1574,9 @@ textarea.notes,input,select{font-size:13.5px;padding:9px 11px;border-radius:10px
 .pcmeta .l1 b{color:var(--ink);font-weight:700}
 .pcmeta .l2{display:flex;flex-wrap:wrap;gap:3px 10px;font-size:11.5px;color:var(--ink2);margin-top:4px}
 .pcmeta .l2 span:not(:first-child)::before{content:"·";margin-right:10px;color:var(--ink3)}
-.pchero{display:grid;grid-template-columns:1.3fr 1fr;gap:10px;margin-bottom:10px}
+.pchero{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:10px;margin-bottom:10px}
 .pchero .hm,.pchero .hs>div{background:linear-gradient(160deg,#153A8F,#0B2265);color:#fff;border-radius:14px;padding:12px 14px;position:relative}
-.pchero .hs{display:grid;gap:10px}
+.pchero .hs{display:grid;gap:10px;grid-template-columns:minmax(0,1fr);min-width:0}
 .pchero .hs>div{background:var(--surface2);color:var(--ink)}
 .pchero b{display:block;font-size:34px;font-weight:900;line-height:1;letter-spacing:-.03em}
 .pchero .hs b{font-size:22px}
@@ -1591,20 +1591,20 @@ textarea.notes,input,select{font-size:13.5px;padding:9px 11px;border-radius:10px
 .pch b{font-size:10px;font-weight:800;letter-spacing:.14em;text-transform:uppercase;color:var(--ink)}
 .pch span{font-size:10.5px;color:var(--ink3);text-align:right}
 .pcn{font-size:11.5px;color:var(--ink2);line-height:1.45;padding:6px 0 2px}
-.pc .prep{margin:4px 0 8px}
-.pc .pown{padding:8px 0 2px}
-.pc .srow{padding:7px 0}
-.pc .usage{padding:0}
+.pcard .prep{margin:4px 0 8px}
+.pcard .pown{padding:8px 0 2px}
+.pcard .srow{padding:7px 0}
+.pcard .usage{padding:0;overflow-x:auto}
 .glog{display:grid}
-.glr{display:grid;grid-template-columns:34px 56px 1fr auto;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--rule);font-size:12.5px}
+.glr{display:grid;grid-template-columns:34px 56px minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--rule);font-size:12.5px}
 .glr .wk{font-weight:800;color:var(--ink3);font-size:12px}
 .glr .op{font-weight:700}.glr .op small{display:block;font-size:10px;color:var(--ink3);font-weight:600}
 .glr .ln{color:var(--ink);line-height:1.35}
 .glr .pt{font-size:16px;font-weight:800;text-align:right}
 .glr .pt small{display:block;font-size:10px;font-weight:700}
 .glr .pt small.up{color:var(--go)}.glr .pt small.dn{color:var(--stop)}
-.pc + .field,.pc + .hlbox{margin-top:4px}
-@media (max-width:899px){.pchero{grid-template-columns:1fr}.pchero .hs{grid-template-columns:1fr 1fr}.pchero b{font-size:30px}.pchero .hs b{font-size:19px}}
+.pcard + .field,.pcard + .hlbox{margin-top:4px}
+@media (max-width:899px){.pchero{grid-template-columns:minmax(0,1fr)}.pchero .hs{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.pchero b{font-size:30px}.pchero .hs b{font-size:19px}}
 `;
 
 // =============================================================================
@@ -2241,7 +2241,7 @@ function PlayerSheet({ p, mine, ownerName, week, irCount, watched, onStatus, onN
   return (
     <Sheet title={p.n} sub={`${p.p}, ${p.t}, bye ${p.b}. ${isFA ? "Free agent" : other ? `On ${ownerName}` : p.via ? `Yours via ${p.via.toLowerCase()}` : "Yours"}. ADP ${p.a < 300 ? p.a : "undrafted"}.`} onClose={onClose}>
       {(() => { const b = p.bio; const h = healthOf(p); const es = effStatus(p); const bd = wkBreakdown(p, week); const m = matchup(p.t, week); const lv = actualOf(p, week); const r = wkRange(p, week); const seasonSrc = [p.pwF != null && `Fantasy Index ${fmt1(p.pwF)}`, p.pwB != null && `Footballguys ${fmt1(p.pwB)}`, p.pwP != null && `PFF ${fmt1(p.pwP)}`].filter(Boolean); const snapProj = PSNAP && PSNAP[week] && PSNAP[week][p.id] != null ? PSNAP[week][p.id] : null; const g = pffPos(p); const sr = sosRos(p); const wv = sosOf(p, week); const u = usageOf(p); const dep = depthOf(p); return (
-        <div className="pc">
+        <div className="pcard">
           <div className="pcid">
             {b && b.hs ? <img className="hsh" src={b.hs} alt="" onError={(e) => { e.target.style.display = "none"; }} /> : <Badge p={p} />}
             <div className="pcmeta">
