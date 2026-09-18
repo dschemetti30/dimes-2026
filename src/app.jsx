@@ -1251,10 +1251,13 @@ textarea.notes{min-height:120px;resize:vertical;line-height:1.5}
   .mast .wkline{order:1;flex:1;padding:0;min-width:0}
   .mast .wkline .d{font-size:13px}
   .mast .wkline .o{font-size:18px}
-  .mast .wkstrip{order:3;width:100%;padding:14px 0 0}
-  .mast .wkstrip{max-width:none}
+  .mast .wkstrip,.mast .rail{order:3;flex:1 1 100%;width:100%;min-width:0;max-width:none;padding:12px 0 2px}
+  .mast .rail .railin{padding:0}
+  .mast .wkline{order:1;flex:1 1 auto;min-width:0;white-space:nowrap}
+  .mast .wkline .o{overflow:hidden;text-overflow:ellipsis}
+  .mast .bar{order:2;flex:0 0 auto}
   .save{max-width:1180px;margin-left:auto;margin-right:auto}
-  .pg{padding:20px 28px 0;max-width:1236px}
+  .pg{padding:20px 32px 0;max-width:none;width:100%}
   .cols{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:18px;align-items:start}
   .cols.wide{grid-template-columns:2fr 3fr}
   .cols.lead{grid-template-columns:3fr 2fr}
@@ -1277,7 +1280,7 @@ textarea.notes{min-height:120px;resize:vertical;line-height:1.5}
   .toast{left:236px}
   .coachwrap{max-width:800px}
   .sbg{align-items:center;padding:28px 28px 28px 264px}
-  .sheet{border-radius:24px;max-height:86vh;max-width:640px;animation:pop .22s cubic-bezier(.2,.8,.2,1)}
+  .sheet{border-radius:24px;max-height:88vh;max-width:760px;animation:pop .22s cubic-bezier(.2,.8,.2,1)}
   @keyframes pop{from{transform:translateY(14px) scale(.985);opacity:0}to{transform:none;opacity:1}}
   .sheet.closing{animation:fadeOut .16s ease-in forwards}
   .grab{display:none}
@@ -1646,6 +1649,50 @@ textarea.notes,input,select{font-size:13.5px;padding:9px 11px;border-radius:10px
 .glr .ln{font-size:12.5px;color:var(--ink2);line-height:1.4;margin-top:3px}
 .pcard + .field,.pcard + .hlbox{margin-top:4px}
 @media (max-width:899px){.pchero{grid-template-columns:minmax(0,1fr)}.pchero .hs{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.pchero b{font-size:30px}.pchero .hs b{font-size:19px}}
+
+/* ===================== Full-width desktop, premium motion ===================== */
+@media (min-width:900px){
+  .pg{padding:22px 32px 48px}
+  .cols{gap:20px}
+  .cols.tx{grid-template-columns:minmax(0,3fr) minmax(0,2fr)}
+  .cols.wide{grid-template-columns:minmax(0,2fr) minmax(0,3fr)}
+  .cols.lead{grid-template-columns:minmax(0,3fr) minmax(0,2fr)}
+  .rgr .pl .pname .t{max-width:260px}
+  .rgh>*,.rgr>*{padding-left:8px;padding-right:8px}
+  .tbl.trend .sth,.tbl.trend .tr{grid-template-columns:minmax(0,1fr) 72px 72px 80px 64px 64px}
+  .tbl.metrics .sth,.tbl.metrics .tr{grid-template-columns:minmax(0,1fr) repeat(8,minmax(56px,72px))}
+  .ggrid{grid-template-columns:repeat(auto-fill,minmax(420px,1fr))}
+  .h2h{grid-template-columns:minmax(0,1fr) 80px minmax(0,1fr)}
+  .h2hp .nm b{white-space:normal}
+  .strow{grid-template-columns:28px minmax(0,1fr) 72px 72px 72px 120px}
+  .mu2 .side .tm{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+  .jump{padding-top:4px}
+  .card{transition:box-shadow .22s cubic-bezier(.2,.8,.2,1),transform .22s cubic-bezier(.2,.8,.2,1)}
+  .card:hover{box-shadow:0 8px 24px rgba(11,34,101,.08),0 0 0 1px rgba(11,34,101,.06)}
+  .dark .card:hover{box-shadow:0 8px 24px rgba(0,0,0,.35),0 0 0 1px rgba(255,255,255,.08)}
+}
+@media (min-width:1400px){
+  .pg{padding:26px 40px 56px}
+  .cols{gap:24px}
+  .ggrid{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+.pg>*{animation:pgin .32s cubic-bezier(.2,.8,.2,1) both}
+.pg>*:nth-child(2){animation-delay:.03s}.pg>*:nth-child(3){animation-delay:.06s}.pg>*:nth-child(4){animation-delay:.09s}.pg>*:nth-child(5){animation-delay:.12s}
+@keyframes pgin{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+.prow,.strow,.tr,.rgr>*,.nrow,.skg{transition:background .16s}
+.btn,.chip,.wk,.nav button,.iconb,.star{transition:transform .14s cubic-bezier(.2,.8,.2,1),background .16s,color .16s,border-color .16s,box-shadow .16s}
+.btn:active,.chip:active,.iconb:active{transform:scale(.96)}
+.chip.on{box-shadow:0 2px 8px rgba(11,34,101,.18)}
+.pill,.dpill,.mx{transition:opacity .16s}
+.fold>.fh .chev,.skw .skh .chev{transition:transform .2s}
+.fold.open>.fh .chev,.skw:not(.shut) .skh .chev{transform:rotate(0)}
+.fsum{animation:pgin .25s both}
+.val .n{transition:color .2s}
+.wpbar i{transition:width .5s cubic-bezier(.2,.8,.2,1)}
+.vbar i,.prog i,.tier i{transition:width .5s cubic-bezier(.2,.8,.2,1)}
+.sheet{will-change:transform}
+.toast{animation:pgin .22s both}
+@media (prefers-reduced-motion:reduce){.pg>*,.fsum,.toast{animation:none}.btn,.chip,.card,.wk{transition:none}}
 `;
 
 // =============================================================================
@@ -2569,7 +2616,7 @@ function MarketView({ week, freeAgents, upgrades, worstAt, watch, onWatch, onAdd
   const targets = useMemo(() => tradeTargets(power), [power]);
   return (
     <div className="wire">
-    <div className="cols wide"><div className="col">
+    <div className="cols tx"><div className="col">
     {HEALTH && HEALTH.trend && ((HEALTH.trend.add && Object.keys(HEALTH.trend.add).length) || (HEALTH.own && Object.keys(HEALTH.own).length)) ? <TrendTable freeAgents={freeAgents} onPlayer={onPlayer} onWatch={onWatch} watch={watch} /> : <section className="card"><div className="ch"><h2 className="cond">Trending</h2><span className="aux">syncs on the web version</span></div><div className="empty">Sleeper adds and drops and ESPN rostered percentages appear here once the health sync runs.</div></section>}
     </div><div className="col">
     <section className="card"><div className="ch"><h2 className="cond">Activity</h2><span className="aux">{log.length ? `${log.length} logged` : "nothing yet"}</span></div>
