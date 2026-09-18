@@ -86,6 +86,7 @@ function vegasGame(team) { if (!VEGAS || !VEGAS.games) return null; return VEGAS
 function vegasFresh(week) { return !!(VEGAS && VEGAS.week === week && VEGAS.games && VEGAS.games.length); }
 let ACT = null; let PSNAP = null;
 function biasOf(p) { if (!ACT || !PSNAP || !p) return null; let n = 0, sum = 0; Object.keys(ACT).forEach((w) => { const a = ACT[w] && ACT[w][p.id]; const pr = PSNAP[w] && PSNAP[w][p.id]; if (!a || pr == null || pr < 2) return; n++; sum += (a.pts - pr) / Math.max(pr, 4); }); if (!n) return null; const raw = sum / n; const shrunk = raw * (n / (n + 3)); return { n, raw, adj: Math.max(-0.15, Math.min(0.15, shrunk * 0.5)) }; }
+function seasonActual(p) { let pts = 0, g = 0; const weeks = new Set([...Object.keys(ACT_BAKED), ...Object.keys(ACT || {})].map(Number)); weeks.forEach((w) => { const a = actualOf(p, w); if (a && a.done) { pts += a.pts; g++; } }); return { pts: Math.round(pts * 10) / 10, g }; }
 function actualOf(p, week) { if (!p) return null; const a = (ACT && ACT[week] && ACT[week][p.id]) || (ACT_BAKED[week] && ACT_BAKED[week][p.id]); if (a) return { pts: a.pts, line: a.line || "", done: true, live: false }; const lv = liveOf(p, week); if (lv && (lv.live || lv.done)) return lv; return null; }
 function liveOf(p, week) { if (!LIVE || LIVE.week !== week || !p) return null; if (p.p === "DEF") { const d = LIVE.dst && LIVE.dst[p.t]; return d ? { pts: d.pts, live: d.live, done: d.done, line: `${d.sack} sk, ${d.int} int, ${d.fr} fr, ${d.td} td, ${d.pa} pa` } : null; } const r = LIVE.players && LIVE.players[normName(p.n)]; if (!r) { const g = LIVE.games && LIVE.games.find((x) => x.home === p.t || x.away === p.t); return g ? { pts: 0, live: g.live, done: g.done, line: g.done ? "no stats" : "no stats yet" } : null; } const parts = []; if (r.att) parts.push(`${r.py} pass yds, ${r.ptd} TD${r.int ? `, ${r.int} INT` : ""}`); if (r.car) parts.push(`${r.car} car ${r.ry} yds${r.rtd ? `, ${r.rtd} TD` : ""}`); if (r.rec || r.tgt) parts.push(`${r.rec}/${r.tgt || r.rec} rec ${r.recy} yds${r.rectd ? `, ${r.rectd} TD` : ""}`); if (r.fgm != null) parts.push(`${r.fgm} FG, ${r.xp} XP`); if (r.fl) parts.push(`${r.fl} fumble lost`); return { pts: r.pts, live: r.live, done: r.done, line: parts.join("; ") || "no stats yet" }; }
 // actual-so-far plus projection for players who have not played
@@ -174,7 +175,8 @@ const slug = (s) => s.toLowerCase().replace(/['.]/g, "").replace(/[^a-z0-9]+/g, 
 const fmt1 = (x) => (Math.round(x * 10) / 10).toFixed(1);
 const signed = (x) => (x >= 0 ? "+" : "") + fmt1(x);
 function matchup(team, week) { const g = NFL[week] && NFL[week][team]; if (!g) return { text: "BYE", bye: true }; const k = KICK[week] && KICK[week][team]; return { text: (g.h ? "vs " : "@ ") + g.o, bye: false, opp: g.o, home: !!g.h, kick: k || "", line: k ? `${k} ${g.h ? "v" : "@"} ${g.o}` : (g.h ? "vs " : "@ ") + g.o }; }
-function lastName(n) { const parts = n.split(" ").filter((x) => !/^(Jr\.?|Sr\.?|II|III|IV|V)$/.test(x)); return parts[parts.length - 1] || n; }
+function lastName(n) { const parts = n.split(" ").filter((x) => !/^(Jr\.?|Sr\.?|II|III|IV|V)$/.test(x)); const last = parts[parts.length - 1] || n; const prev = parts[parts.length - 2]; return prev && /^(St\.|Van|De|Del|La|Da|Le|Von|Mc|Mac)$/i.test(prev) ? `${prev} ${last}` : last; }
+function shortName(p) { if (!p) return ""; if (p.p === "DEF") return p.n; const first = p.n.split(" ")[0]; return `${first[0]}. ${lastName(p.n)}`; }
 const hasProj = (p) => p && p.pw != null;
 const srcList = (p) => [p.pwF != null && "FI", p.pwB != null && "FBG", p.pwP != null && "PFF"].filter(Boolean);
 const pw = (p) => (hasProj(p) ? p.pw : 1.0);
@@ -1180,7 +1182,9 @@ textarea.notes{min-height:120px;resize:vertical;line-height:1.5}
 .nav .brand,.nav .spacer,.nav .gearbtn{display:none}
 .nav button.deskonly{display:none}
 @media (min-width:900px){.nav button.deskonly{display:flex}.nav button.mobonly{display:none}}
-.rank .ch .seg.sm button{padding:5px 10px;font-size:12px}
+.rank .ch .seg.sm{display:inline-flex;flex-direction:row;width:auto}
+.rank .ch .seg.sm button{padding:5px 10px;font-size:12px;white-space:nowrap}
+.rank .ch .aux{flex:none}
 .rgwrap{overflow-x:auto;-webkit-overflow-scrolling:touch;padding:0 0 4px}
 .rg{display:grid;min-width:100%;font-variant-numeric:tabular-nums}
 .rgh,.rgr{display:contents}
@@ -1477,7 +1481,8 @@ textarea.notes,input,select{font-size:13.5px;padding:9px 11px;border-radius:10px
 .vd.up{color:var(--go)}
 .tbl.trend .sth,.tbl.trend .tr{grid-template-columns:minmax(0,1fr) 60px 56px 52px 56px 72px}
 .fh{display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:12px var(--pad-x) 6px}
-.fh h2{margin:0;flex:none}
+.fh h2{margin:0;flex:none;font-size:var(--t-h2);letter-spacing:.13em;text-transform:uppercase;font-weight:800;display:flex;align-items:center;gap:8px}
+.fh h2::before{content:"";width:3px;height:14px;border-radius:2px;background:var(--red)}
 .fh .aux{margin-left:auto;font-size:11px;color:var(--ink2);text-align:right}
 .fh .chev{font-size:12px;color:var(--ink3);width:14px;text-align:center}
 .card.fold.shut{padding-bottom:0}
@@ -1586,6 +1591,19 @@ textarea.notes,input,select{font-size:13.5px;padding:9px 11px;border-radius:10px
 @media (max-width:899px){.wk{width:52px;height:54px;border-radius:12px}.wk .n{font-size:16px}}
 
 /* ===================== Player card v2 ===================== */
+.wpbar.calm i:first-child{background:var(--ink3);opacity:.55}
+.wpbar.calm i:last-child{background:var(--navy)}
+.dark .wpbar.calm i:last-child{background:#8FB1FF}
+.gcard{background:var(--surface);border:1px solid var(--rule);box-shadow:none}
+.gcard:hover{box-shadow:0 6px 18px rgba(11,34,101,.08)}
+.gcard .gtop{padding-top:8px}
+.gcard .mx{border:1px solid var(--rule2);color:var(--ink2)}
+.gcard .mx.soft{color:var(--go)}.gcard .mx.tough{color:var(--stop)}
+.fol{background:transparent;border:1px dashed var(--rule2);color:var(--ink2)}
+.fol.hot{border-color:var(--warn);background:transparent}
+.wx{color:var(--ink2)}.wx b{color:var(--ink)}
+.wx.warn{color:var(--warn)}.wx.bad{color:var(--stop)}
+.gcard .nmark{box-shadow:none}
 .pcard{padding:0 12px 6px;white-space:normal}
 .pcid{display:flex;gap:12px;align-items:center;padding:2px 2px 10px}
 .pcid .hsh{width:64px;height:64px;border-radius:14px;flex:none;background:var(--surface2)}
@@ -1616,13 +1634,16 @@ textarea.notes,input,select{font-size:13.5px;padding:9px 11px;border-radius:10px
 .pcard .srow{padding:7px 0}
 .pcard .usage{padding:0;overflow-x:auto}
 .glog{display:grid}
-.glr{display:grid;grid-template-columns:34px 56px minmax(0,1fr) auto;gap:8px;align-items:center;padding:7px 0;border-bottom:1px solid var(--rule);font-size:12.5px}
-.glr .wk{font-weight:800;color:var(--ink3);font-size:12px}
-.glr .op{font-weight:700}.glr .op small{display:block;font-size:10px;color:var(--ink3);font-weight:600}
-.glr .ln{color:var(--ink);line-height:1.35}
-.glr .pt{font-size:16px;font-weight:800;text-align:right}
-.glr .pt small{display:block;font-size:10px;font-weight:700}
-.glr .pt small.up{color:var(--go)}.glr .pt small.dn{color:var(--stop)}
+.glr{padding:8px 0;border-bottom:1px solid var(--rule)}
+.glr .top{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;font-size:12px}
+.glr .gw{font-weight:800;color:var(--ink3);letter-spacing:.04em;font-size:11px;text-transform:uppercase}
+.glr .op{font-weight:700;color:var(--ink)}
+.glr .sn{color:var(--ink3);font-size:11px}
+.glr .pt{margin-left:auto;font-size:16px;font-weight:800}
+.glr .pt small{font-size:9px;font-weight:700;color:var(--ink3);margin-left:3px;letter-spacing:.08em}
+.glr .dl{font-size:11px;font-weight:700}
+.glr .dl.up{color:var(--go)}.glr .dl.dn{color:var(--stop)}
+.glr .ln{font-size:12.5px;color:var(--ink2);line-height:1.4;margin-top:3px}
 .pcard + .field,.pcard + .hlbox{margin-top:4px}
 @media (max-width:899px){.pchero{grid-template-columns:minmax(0,1fr)}.pchero .hs{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}.pchero b{font-size:30px}.pchero .hs b{font-size:19px}}
 `;
@@ -1637,7 +1658,7 @@ function NflMark({ team, size, label }) {
 function SortHead({ cols, sort, dir, onSort, first }) {
   return (<div className="sth">{first && <span className="fst">{first}</span>}{cols.map(([k, l, title]) => <button key={k} className={"shb" + (sort === k ? " on" : "")} onClick={() => onSort(k)} title={title || l}>{l}<i>{sort === k ? (dir === "desc" ? "▼" : "▲") : ""}</i></button>)}</div>);
 }
-function useSort(initial, initialDir) { const [sort, setSortK] = useState(initial); const [dir, setDir] = useState(initialDir || "desc"); const onSort = (k) => { if (k === sort) setDir((d) => (d === "desc" ? "asc" : "desc")); else { setSortK(k); setDir("desc"); } }; return { sort, dir, onSort }; }
+function useSort(initial, initialDir) { const [sort, setSortK] = useState(initial); const [dir, setDir] = useState(initialDir || "desc"); const onSort = (k, force) => { if (k === sort && !force) setDir((d) => (d === "desc" ? "asc" : "desc")); else { setSortK(k); setDir("desc"); } }; return { sort, dir, onSort }; }
 const UI_KEY = "dimes:ui";
 let UI_OPEN = null;
 function uiLoad() { if (UI_OPEN) return UI_OPEN; try { UI_OPEN = JSON.parse((typeof localStorage !== "undefined" && localStorage.getItem(UI_KEY)) || "{}") || {}; } catch (e) { UI_OPEN = {}; } return UI_OPEN; }
@@ -2306,7 +2327,7 @@ function PlayerSheet({ p, mine, ownerName, week, irCount, watched, onStatus, onN
           </div>}
           {u && (() => { const ws = usageWeeks().filter((w) => u.wk[w]); if (!ws.length) return null; const line = (rr) => p.p === "QB" ? `${rr.cmp != null ? rr.cmp + "/" : ""}${rr.att} for ${rr.py}, ${rr.ptd || 0} TD${rr.int ? `, ${rr.int} INT` : ""}${rr.car ? `; ${rr.car} car ${rr.ry}${rr.rtd ? `, ${rr.rtd} TD` : ""}` : ""}` : p.p === "RB" ? `${rr.car} car ${rr.ry}${rr.rtd ? `, ${rr.rtd} TD` : ""}${rr.tgt || rr.rec ? `; ${rr.rec}/${rr.tgt} rec ${rr.recy}${rr.rectd ? `, ${rr.rectd} TD` : ""}` : ""}` : `${rr.rec}/${rr.tgt} rec ${rr.recy}${rr.rectd ? `, ${rr.rectd} TD` : ""}${rr.car ? `; ${rr.car} car ${rr.ry}${rr.rtd ? `, ${rr.rtd} TD` : ""}` : ""}`; return (
             <div className="pcs"><div className="pch"><b>2026 game log</b><span>box score, snap share, points vs the projection on file</span></div>
-              <div className="glog">{ws.map((w) => { const rr = u.wk[w]; const pr = PSNAP && PSNAP[w] && PSNAP[w][p.id] != null ? PSNAP[w][p.id] : null; const dlt = pr != null ? rr.fp - pr : null; return <div key={w} className="glr"><span className="wk cond">W{w}</span><span className="op">{rr.opp}<small>{rr.snap != null ? `${rr.snap}% snaps` : ""}</small></span><span className="ln">{line(rr)}</span><span className="pt cond">{fmt1(rr.fp)}{dlt != null && <small className={dlt >= 0 ? "up" : "dn"}>{signed(Math.round(dlt * 10) / 10)}</small>}</span></div>; })}</div>
+              <div className="glog">{ws.map((w) => { const rr = u.wk[w]; const pr = PSNAP && PSNAP[w] && PSNAP[w][p.id] != null ? PSNAP[w][p.id] : null; const dlt = pr != null ? rr.fp - pr : null; return <div key={w} className="glr"><div className="top"><span className="gw cond">Week {w}</span><span className="op">{matchup(p.t, w).home ? "vs" : "@"} {rr.opp}</span>{rr.snap != null && <span className="sn">{rr.snap}% snaps</span>}<span className="pt cond">{fmt1(rr.fp)}<small>pts</small></span>{dlt != null && <span className={"dl cond " + (dlt >= 0 ? "up" : "dn")}>{signed(Math.round(dlt * 10) / 10)} vs proj</span>}</div><div className="ln">{line(rr)}</div></div>; })}</div>
             </div>); })()}
           {u && (() => { const ws = usageWeeks().filter((w) => u.wk[w]); if (!ws.length || p.p === "K") return null; return (
             <div className="pcs"><div className="pch"><b>Usage</b><span>share of the offense, from nflverse</span></div>
@@ -2537,7 +2558,7 @@ function DropCandidates({ active, irList, week, onPlayer }) {
   );
 }
 function MarketView({ week, freeAgents, upgrades, worstAt, watch, onWatch, onAdd, onPlayer, power, onTeam, log, onImport, onLogOne, active, irList }) {
-  const [pos, setPos] = useState("ALL"); const [availOnly, setAvailOnly] = useState(true); const [q, setQ] = useState(""); const [limit, setLimit] = useState(30);
+  const [pos, setPos] = useState("ALL"); const [availOnly, setAvailOnly] = useState(true); const [q, setQ] = useState(""); const [limit, setLimit] = useState(30); const [logAll, setLogAll] = useState(false);
   const watched = new Set(watch.map((w) => w.id));
   const gainOf = (p) => pw(p) - (worstAt[p.p] || 0);
   const list = useMemo(() => { const s = q.trim().toLowerCase(); return freeAgents.filter((p) => pos === "ALL" || p.p === pos).filter((p) => !availOnly || !matchup(p.t, week).bye).filter((p) => !s || p.n.toLowerCase().includes(s) || p.t.toLowerCase().includes(s)).sort((a, b) => gainOf(b) - gainOf(a)); }, [freeAgents, pos, availOnly, q, week, worstAt]);
@@ -2548,11 +2569,15 @@ function MarketView({ week, freeAgents, upgrades, worstAt, watch, onWatch, onAdd
   const targets = useMemo(() => tradeTargets(power), [power]);
   return (
     <div className="wire">
-    <section className="card"><div className="ch"><h2 className="cond">Activity log</h2><span className="aux">league-wide, as logged</span></div>
-      <div className="btns" style={{ paddingTop: 6 }}><button className="btn pri" onClick={onImport}>Import from Yahoo</button><button className="btn" onClick={onLogOne}>Log one move</button></div>
-      <div className="log">{log.length === 0 && <div className="muted">No moves yet.</div>}{log.slice(0, 30).map((e, i) => <div key={i}><span className="t">{e.t}</span><span>{e.text}</span></div>)}</div>
+    <div className="cols wide"><div className="col">
+    {HEALTH && HEALTH.trend && ((HEALTH.trend.add && Object.keys(HEALTH.trend.add).length) || (HEALTH.own && Object.keys(HEALTH.own).length)) ? <TrendTable freeAgents={freeAgents} onPlayer={onPlayer} onWatch={onWatch} watch={watch} /> : <section className="card"><div className="ch"><h2 className="cond">Trending</h2><span className="aux">syncs on the web version</span></div><div className="empty">Sleeper adds and drops and ESPN rostered percentages appear here once the health sync runs.</div></section>}
+    </div><div className="col">
+    <section className="card"><div className="ch"><h2 className="cond">Activity</h2><span className="aux">{log.length ? `${log.length} logged` : "nothing yet"}</span></div>
+      <div className="btns" style={{ paddingTop: 6 }}><button className="btn pri sm" onClick={onImport}>Import from Yahoo</button><button className="btn sm" onClick={onLogOne}>Log one move</button></div>
+      <div className="log">{log.length === 0 && <div className="muted">No moves yet.</div>}{log.slice(0, logAll ? 60 : 5).map((e, i) => <div key={i}><span className="t">{e.t}</span><span>{e.text}</span></div>)}</div>
+      {log.length > 5 && <div className="btns" style={{ paddingTop: 0 }}><button className="lnk" onClick={() => setLogAll((v) => !v)}>{logAll ? "Show 5 most recent" : `Show all ${log.length}`}</button></div>}
     </section>
-    {HEALTH && HEALTH.trend && ((HEALTH.trend.add && Object.keys(HEALTH.trend.add).length) || (HEALTH.own && Object.keys(HEALTH.own).length)) ? <TrendTable freeAgents={freeAgents} onPlayer={onPlayer} onWatch={onWatch} watch={watch} /> : null}
+    </div></div>
     <div className="cols wide"><div className="col">
       <section className="card"><div className="ch"><h2 className="cond">Trade targets</h2><span className="aux">{targets.worst.map((w) => w.pos).join(", ")} are your gaps</span></div>
         {targets.list.length === 0 && <div className="empty">Nobody in the league clearly beats your starters at your weak spots.</div>}
@@ -2619,11 +2644,11 @@ function posStrength(r, g) { const st = SLOTS.filter((s) => s.elig.length === 1 
 let TLINE = null;
 function teamLineupFor(team, players, week) { const L = TLINE && TLINE[week] && TLINE[week][team]; if (L) { const ids = new Set(players.map((p) => p.id)); const ok = SLOTS.every((s0) => !L[s0.k] || ids.has(L[s0.k])); if (ok && Object.values(L).filter(Boolean).length >= 8) return { L, imported: true }; } return { L: bestLineup(players, week), imported: false }; }
 function RankingsView({ week, owner, watch, onWatch, onPlayer }) {
-  const [mode, setMode] = useState("week"); const [pos, setPos] = useState("ALL"); const [avail, setAvail] = useState("all"); const [q, setQ] = useState(""); const [limit, setLimit] = useState(120);
+  const [mode, setMode] = useState("week"); const [pos, setPos] = useState("ALL"); const [avail, setAvail] = useState("all"); const [q, setQ] = useState(""); const [limit, setLimit] = useState(120); const [basis, setBasis] = useState("proj");
   const { sort, dir, onSort } = useSort("blend", "desc");
   const watched = new Set(watch.map((w) => w.id));
-  const weekCols = [["depth", "Depth", "Depth chart slot, Two Deep"], ["blend", "Blend", "Our this-week number, all sources weighted"], ["fi", "FI", "Fantasy Index weekly projection"], ["fbg", "FBG", "Footballguys weekly projection"], ["pffp", "PFF pts", "PFF weekly projection"], ["pff", "PFF rk", "PFF weekly rank at the position"], ["ath", "ATH", "Athletic / FantasyPros expert rank"], ["veg", "Vegas", "Implied by props and totals"], ["floor", "Floor", "25th-percentile outcome"], ["ceil", "Ceil", "85th-percentile outcome"], ["mx", "SOS", "PFF matchup, 0 to 10, higher is easier"], ["grade", "PFF", "PFF offense grade, season to date"], ["act", "Actual", "Live or final points"]];
-  const seasonCols = [["depth", "Depth", "Depth chart slot, Two Deep"], ["blend", "Blend", "Rest of season, per week"], ["fi", "FI", "Fantasy Index per week"], ["fbg", "FBG", "Footballguys per week"], ["pff", "PFF", "PFF per week"], ["rk", "FI rk", "Fantasy Index position rank"], ["rkB", "FBG rk", "Footballguys position rank"], ["adp", "ADP", "Yahoo draft ADP"], ["ppg25", "2025", "Points per game last season"], ["bias", "Trend", "Beating or trailing projections this season"], ["sosS", "ROS SOS", "PFF rest-of-season matchup score, higher is easier"], ["sosP", "Playoff SOS", "PFF weeks 15 to 17 matchup score"], ["grade", "PFF", "PFF offense grade, season to date"], ["bye", "Bye", "Bye week"]];
+  const weekCols = [["depth", "Depth", "Depth chart slot, Two Deep"], ["act", "Actual", "Points scored this week, live or final"], ["blend", "Proj", "Our this-week projection, all sources weighted"], ["fi", "FI", "Fantasy Index weekly projection"], ["fbg", "FBG", "Footballguys weekly projection"], ["pffp", "PFF pts", "PFF weekly projection"], ["pff", "PFF rk", "PFF weekly rank at the position"], ["ath", "ATH", "Athletic / FantasyPros expert rank"], ["veg", "Vegas", "Implied by props and totals"], ["floor", "Floor", "25th-percentile outcome"], ["ceil", "Ceil", "85th-percentile outcome"], ["mx", "SOS", "PFF matchup, 0 to 10, higher is easier"], ["grade", "PFF", "PFF offense grade, season to date"]];
+  const seasonCols = [["depth", "Depth", "Depth chart slot, Two Deep"], ["stp", "Pts", "Season points so far"], ["ppg", "Pts/g", "Points per game played"], ["blend", "Proj", "Rest of season, per week"], ["fi", "FI", "Fantasy Index per week"], ["fbg", "FBG", "Footballguys per week"], ["pff", "PFF", "PFF per week"], ["rk", "FI rk", "Fantasy Index position rank"], ["rkB", "FBG rk", "Footballguys position rank"], ["adp", "ADP", "Yahoo draft ADP"], ["ppg25", "2025", "Points per game last season"], ["bias", "Trend", "Beating or trailing projections this season"], ["sosS", "ROS SOS", "PFF rest-of-season matchup score, higher is easier"], ["sosP", "Playoff SOS", "PFF weeks 15 to 17 matchup score"], ["grade", "PFF", "PFF offense grade, season to date"], ["bye", "Bye", "Bye week"]];
   const usageCols = [["opp", "Opp", "Opportunity score: snaps, targets, air yards and carries weighted by position"], ["snap", "Snap%", "Offensive snap share, last game"], ["tgt", "Tgt", "Targets"], ["ts", "Tgt%", "Team target share"], ["ays", "AY%", "Team air-yards share"], ["wopr", "WOPR", "1.5 x target share + 0.7 x air-yards share"], ["adot", "aDOT", "Average depth of target"], ["car", "Car", "Carries"], ["rs", "Rush%", "Team carry share"], ["epa", "EPA", "Expected points added"], ["grade", "PFF", "PFF offense grade"], ["fp", "Pts", "Fantasy points that week"], ["blend", "Next", "This week's projection"]];
   const cols = mode === "week" ? weekCols : mode === "season" ? seasonCols : usageCols;
   const uWeek = (() => { const ws = usageWeeks(); return ws.length ? ws[ws.length - 1] : null; })();
@@ -2633,7 +2658,7 @@ function RankingsView({ week, owner, watch, onWatch, onPlayer }) {
     const out = list.map((p) => { const wk = weekly(p, week) || {}; const bd = mode === "week" ? wkBreakdown(p, week) : null; const r = mode === "week" ? wkRange(p, week) : null; const a = mode === "week" ? actualOf(p, week) : null; const b = biasOf(p); const m = matchup(p.t, week);
       const dd = depthOf(p); const depth = dd && !dd.missing ? dd.order : null; const pg = pffPos(p); const sr = sosRos(p);
       return mode === "week" ? { p, name: p.n, depth, grade: pg ? pg.off : null, blend: m.bye ? 0 : wkPts(p, week), fi: wk.fi != null ? wk.fi : null, fbg: wk.fbg ? wk.fbg[0] : null, pffp: wk.pffp != null ? wk.pffp : null, pff: wk.pff != null ? wk.pff : null, ath: wk.ath != null ? wk.ath : null, veg: vegasFresh(week) ? vegasPts(p) : null, floor: r.floor, ceil: r.ceil, mx: m.bye ? null : (sosOf(p, week) != null ? sosOf(p, week) : null), act: a ? a.pts : null, live: a ? a.live : false, fin: a ? a.done : false, bye: m.bye, n: bd.parts.filter((x) => x.w > 0).length }
-        : { p, name: p.n, depth, grade: pg ? pg.off : null, sosS: sr ? sr.season : null, sosP: sr ? sr.playoffs : null, blend: hasProj(p) ? pw(p) : null, fi: p.pwF != null ? p.pwF : null, fbg: p.pwB != null ? p.pwB : null, pff: p.pwP != null ? p.pwP : null, rk: p.rk != null ? p.rk : null, rkB: p.rkB != null ? p.rkB : null, adp: p.a && p.a < 300 ? p.a : null, ppg25: p.s25 ? p.s25.ppg : null, bias: b ? Math.round(b.raw * 100) : null, bye: p.b }; });
+        : { p, name: p.n, depth, grade: pg ? pg.off : null, sosS: sr ? sr.season : null, sosP: sr ? sr.playoffs : null, stp: seasonActual(p).pts, ppg: seasonActual(p).g ? Math.round((seasonActual(p).pts / seasonActual(p).g) * 10) / 10 : null, blend: hasProj(p) ? pw(p) : null, fi: p.pwF != null ? p.pwF : null, fbg: p.pwB != null ? p.pwB : null, pff: p.pwP != null ? p.pwP : null, rk: p.rk != null ? p.rk : null, rkB: p.rkB != null ? p.rkB : null, adp: p.a && p.a < 300 ? p.a : null, ppg25: p.s25 ? p.s25.ppg : null, bias: b ? Math.round(b.raw * 100) : null, bye: p.b }; });
     const sg = dir === "desc" ? -1 : 1; const rankCols = new Set(mode === "week" ? ["depth", "pff", "ath", "rk", "rkB", "adp", "bye"] : ["depth", "rk", "rkB", "adp", "bye"]);
     return out.sort((x, y) => { const a = x[sort], b = y[sort]; if (typeof a === "string") return sg * a.localeCompare(b); const inv = rankCols.has(sort) ? -1 : 1; const av = a == null ? (rankCols.has(sort) ? 1e9 : -1e9) : a * inv, bv = b == null ? (rankCols.has(sort) ? 1e9 : -1e9) : b * inv; return sg * (av - bv); });
   }, [mode, pos, avail, q, sort, dir, week, owner, VEGAS && VEGAS.at, ACT && ACT[week], LIVE && LIVE.at]);
@@ -2642,11 +2667,12 @@ function RankingsView({ week, owner, watch, onWatch, onPlayer }) {
   const shown = rows.slice(0, limit);
   return (
     <section className="card rank">
-      <div className="ch"><h2 className="cond">Rankings</h2><span className="aux"><div className="seg sm"><button className={mode === "week" ? "on" : ""} onClick={() => { setMode("week"); }}>Week {week}</button><button className={mode === "season" ? "on" : ""} onClick={() => { setMode("season"); }}>Season</button><button className={mode === "usage" ? "on" : ""} onClick={() => { setMode("usage"); onSort("opp"); }}>Deep dive</button></div></span></div>
+      <div className="ch"><h2 className="cond">Rankings</h2><span className="aux"><div className="seg sm"><button className={mode === "week" ? "on" : ""} onClick={() => { setMode("week"); onSort(basis === "act" ? "act" : "blend", true); }}>Week {week}</button><button className={mode === "season" ? "on" : ""} onClick={() => { setMode("season"); onSort(basis === "act" ? "stp" : "blend", true); }}>Season</button><button className={mode === "usage" ? "on" : ""} onClick={() => { setMode("usage"); onSort("opp", true); }}>Deep dive</button></div></span></div>
       <div className="cb" style={{ paddingTop: 2, paddingBottom: 6 }}>
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search player, NFL team, or owner" />
         <div className="chips" style={{ marginTop: 8 }}>{["ALL", "QB", "RB", "WR", "TE", "FLEX", "K", "DEF"].map((x) => <button key={x} className={"chip" + (pos === x ? " on" : "")} onClick={() => setPos(x)}>{x === "ALL" ? "All" : x}</button>)}</div>
         <div className="chips" style={{ marginTop: 6 }}>{[["all", "Everyone"], ["fa", "Free agents"], ["mine", "My team"], ["owned", "Other rosters"]].map(([k, l]) => <button key={k} className={"chip" + (avail === k ? " on" : "") + (k === "fa" ? " hl" : "")} onClick={() => setAvail(k)}>{l}</button>)}</div>
+        {mode !== "usage" && <div className="sortrow"><span className="lab">Rank by</span>{[["proj", mode === "week" ? "Projected" : "Rest of season"], ["act", mode === "week" ? "Actual points" : "Season points so far"]].map(([k, l]) => <button key={k} className={"chip" + (basis === k ? " on" : "")} onClick={() => { setBasis(k); onSort(k === "act" ? (mode === "week" ? "act" : "stp") : "blend", true); }}>{l}</button>)}</div>}
       </div>
       <div className="rgwrap"><div className="rg" style={{ gridTemplateColumns: `36px minmax(180px,1fr) 64px ${cols.map(() => "68px").join(" ")}` }}>
         <div className="rgh"><span>#</span><span className="l">Player</span><span className="l">Owner</span>{cols.map(([k, l, t]) => <button key={k} className={"shb" + (sort === k ? " on" : "")} title={t} onClick={() => onSort(k)}>{l}<i>{sort === k ? (dir === "desc" ? "▼" : "▲") : ""}</i></button>)}</div>
@@ -2672,7 +2698,7 @@ function MatchupView({ week, lineup, byId, bench, opp, oppName, myLive, onPlayer
   const decisive = [...rows].sort((x, y) => Math.abs(y.d) - Math.abs(x.d)).slice(0, 3);
   const flags = (arr, who) => arr.map((x) => x.p).filter((p) => p && effStatus(p) !== "ok").map((p) => `${p.n} (${STATUS[effStatus(p)].label})`);
   const myFlags = flags(mine), theirFlags = flags(theirs);
-  const games = {}; [...mine, ...theirs].forEach((x) => { if (!x.p) return; const m = matchup(x.p.t, week); if (m.bye) return; const key = m.home ? `${m.opp}@${x.p.t}` : `${x.p.t}@${m.opp}`; games[key] = games[key] || { key, mine: [], theirs: [], g: VEGAS && vegasFresh(week) ? VEGAS.games.find((g) => `${g.away}@${g.home}` === key) : null }; }); mine.forEach((x) => { if (!x.p) return; const m = matchup(x.p.t, week); if (m.bye) return; const key = m.home ? `${m.opp}@${x.p.t}` : `${x.p.t}@${m.opp}`; games[key].mine.push(lastName(x.p.n)); }); theirs.forEach((x) => { if (!x.p) return; const m = matchup(x.p.t, week); if (m.bye) return; const key = m.home ? `${m.opp}@${x.p.t}` : `${x.p.t}@${m.opp}`; games[key].theirs.push(lastName(x.p.n)); });
+  const games = {}; [...mine, ...theirs].forEach((x) => { if (!x.p) return; const m = matchup(x.p.t, week); if (m.bye) return; const key = m.home ? `${m.opp}@${x.p.t}` : `${x.p.t}@${m.opp}`; games[key] = games[key] || { key, mine: [], theirs: [], g: VEGAS && vegasFresh(week) ? VEGAS.games.find((g) => `${g.away}@${g.home}` === key) : null }; }); mine.forEach((x) => { if (!x.p) return; const m = matchup(x.p.t, week); if (m.bye) return; const key = m.home ? `${m.opp}@${x.p.t}` : `${x.p.t}@${m.opp}`; games[key].mine.push(shortName(x.p)); }); theirs.forEach((x) => { if (!x.p) return; const m = matchup(x.p.t, week); if (m.bye) return; const key = m.home ? `${m.opp}@${x.p.t}` : `${x.p.t}@${m.opp}`; games[key].theirs.push(shortName(x.p)); });
   const past = Object.keys(results).map(Number).filter((w) => w < week && MY_SCHEDULE[w] === oppName && weekResult(results, w));
   return (
     <div className="cols"><div className="col">
@@ -2686,14 +2712,14 @@ function MatchupView({ week, lineup, byId, bench, opp, oppName, myLive, onPlayer
       <section className="card"><div className="ch"><h2 className="cond">Slot by slot</h2><span className="aux">edge per slot</span></div>
         {rows.map(({ s: s0, a, b, d }) => (
           <div key={s0.k} className="h2h">
-            <button className="h2hp" onClick={() => a && onPlayer(a.id)}>{a ? <><Badge p={a} /><span className="nm"><b>{lastName(a.n)}</b><small>{a.t} {matchup(a.t, week).line}</small></span></> : <span className="muted">Empty</span>}<span className="v cond">{a ? fmt1(val(a)) : "–"}</span></button>
+            <button className="h2hp" onClick={() => a && onPlayer(a.id)}>{a ? <><Badge p={a} /><span className="nm"><b>{shortName(a)}</b><small>{a.t} {matchup(a.t, week).line}</small></span></> : <span className="muted">Empty</span>}<span className="v cond">{a ? fmt1(val(a)) : "–"}</span></button>
             <div className="h2hm"><span className="slot cond">{s0.label}</span><span className={"d cond " + (d > 0.5 ? "up" : d < -0.5 ? "dn" : "")}>{signed(d)}</span></div>
-            <button className="h2hp r" onClick={() => b && onPlayer(b.id)}><span className="v cond">{b ? fmt1(val(b)) : "–"}</span>{b ? <><span className="nm r"><b>{lastName(b.n)}</b><small>{b.t} {matchup(b.t, week).line}</small></span><Badge p={b} /></> : <span className="muted">Empty</span>}</button>
+            <button className="h2hp r" onClick={() => b && onPlayer(b.id)}><span className="v cond">{b ? fmt1(val(b)) : "–"}</span>{b ? <><span className="nm r"><b>{shortName(b)}</b><small>{b.t} {matchup(b.t, week).line}</small></span><Badge p={b} /></> : <span className="muted">Empty</span>}</button>
           </div>))}
       </section>
     </div><div className="col">
       <section className="card"><div className="ch"><h2 className="cond">Where it's decided</h2></div>
-        <ul className="pkr" style={{ margin: "0 16px 10px" }}>{decisive.map(({ s: s0, a, b, d }) => <li key={s0.k}><b>{s0.label}</b>: {d >= 0 ? `you by ${fmt1(d)}` : `them by ${fmt1(-d)}`} ({a ? lastName(a.n) : "empty"} vs {b ? lastName(b.n) : "empty"}).</li>)}<li>Total: {myT >= opT ? `you by ${fmt1(myT - opT)}` : `them by ${fmt1(opT - myT)}`}, {Math.round(wp * 100)}% to win with a {SCORE_SD}-point weekly spread.</li></ul>
+        <ul className="pkr" style={{ margin: "0 16px 10px" }}>{decisive.map(({ s: s0, a, b, d }) => <li key={s0.k}><b>{s0.label}</b>: {d >= 0 ? `you by ${fmt1(d)}` : `them by ${fmt1(-d)}`} ({a ? shortName(a) : "empty"} vs {b ? shortName(b) : "empty"}).</li>)}<li>Total: {myT >= opT ? `you by ${fmt1(myT - opT)}` : `them by ${fmt1(opT - myT)}`}, {Math.round(wp * 100)}% to win with a {SCORE_SD}-point weekly spread.</li></ul>
       </section>
       {(() => { const rows = [...mine.map((x) => x.p), ...theirs.map((x) => x.p)].filter(Boolean).map((p) => ({ p, bits: noteBits(p, 1) })).filter((x) => x.bits.length); if (!rows.length) return null; return (
         <section className="card"><div className="ch"><h2 className="cond">Fantasy Index on this week</h2><span className="aux">{NOTES_DATE}</span></div>
@@ -2753,7 +2779,8 @@ function LeagueView({ week, power, standings, sim, scores, owner, playoffTeams, 
   const played = standings.reduce((a, x) => a + x.g, 0) / 2;
   // this week's matchups with projections
   const matchups = useMemo(() => { const done = new Set(); const out = []; if (week > REG_WEEKS) return out; LEAGUE_TEAMS.forEach((a) => { const b = LSCHED[week][a]; if (done.has(a)) return; done.add(a); done.add(b); const ra = power.find((r) => r.team === a), rb = power.find((r) => r.team === b); const La = ra ? (a === ME && myLineup ? myLineup : teamLineupFor(a, ra.players, week).L) : {}, Lb = rb ? (b === ME && myLineup ? myLineup : teamLineupFor(b, rb.players, week).L) : {}; const haveAct = (LIVE && LIVE.week === week) || (ACT && ACT[week]); const lvA = ra && haveAct ? liveTotal(La, ra.byId, week) : null, lvB = rb && haveAct ? liveTotal(Lb, rb.byId, week) : null; const pa = lvA ? lvA.total : ra ? lineupTotal(La, ra.byId, week) : 0, pb = lvB ? lvB.total : rb ? lineupTotal(Lb, rb.byId, week) : 0; const sa = scores[week] && scores[week][a], sb = scores[week] && scores[week][b]; out.push({ a, b, pa, pb, wp: winProb(pa, pb), sa, sb, live: !!(lvA || lvB), la: lvA ? lvA.pts : null, lb: lvB ? lvB.pts : null }); }); return out.sort((x, y) => (x.a === ME || x.b === ME ? -1 : y.a === ME || y.b === ME ? 1 : 0)); }, [power, week, scores]);
-  const leaders = useMemo(() => POOL.filter((p) => p.p === posTab && hasProj(p)).sort((a, b) => pw(b) - pw(a)).slice(0, 12), [posTab]);
+  const [lbasis, setLbasis] = useState("season");
+  const leaders = useMemo(() => { if (lbasis === "ros") return POOL.filter((p) => p.p === posTab && hasProj(p)).sort((a, b) => pw(b) - pw(a)).slice(0, 12); if (lbasis === "week") return POOL.filter((p) => p.p === posTab).map((p) => ({ p, v: (actualOf(p, week) || {}).pts })).filter((x) => x.v != null).sort((a, b) => b.v - a.v).slice(0, 12).map((x) => x.p); return POOL.filter((p) => p.p === posTab).map((p) => ({ p, v: seasonActual(p).pts })).filter((x) => x.v > 0).sort((a, b) => b.v - a.v).slice(0, 12).map((x) => x.p); }, [posTab, lbasis, week, ACT && Object.keys(ACT).length]);
   return (
     <div className="cols lead"><div className="col">
       <JumpBar items={[["standings", "Standings"], ["matchups", "Matchups"], ["power", "Power"], ["stand", "Where you stand"], ["leaders", "Leaders"]]} />
@@ -2800,9 +2827,10 @@ function LeagueView({ week, power, standings, sim, scores, owner, playoffTeams, 
       <Fold id="stand" title="Where you stand" def={false} summary="Gaps to the teams above and below you, by position." aux={`avg starter vs league`}>
         <div className="stats">{needs.slice().sort((a, b) => POS_ORDER[a.pos] - POS_ORDER[b.pos]).map((n) => <div key={n.pos} className="stat"><div className={"v cond " + (n.gap >= 0 ? "up" : "dn")}>{signed(n.gap)}</div><div className="k">{n.pos}, avg {fmt1(n.avg)}</div></div>)}</div>
       </Fold>
-      <Fold id="leaders" title="Position leaders" def={false} summary="Top 12 at each position, league-wide." aux={`season value, league-wide`}>
-        <div className="cb" style={{ paddingTop: 2, paddingBottom: 6 }}><div className="chips">{POS_LIST.map((g) => <button key={g} className={"chip" + (posTab === g ? " on" : "")} onClick={() => setPosTab(g)}>{g}</button>)}</div></div>
-        {leaders.map((p, i) => { const own = owner[p.id]; return <PRow key={p.id} p={p} week={week} onClick={() => onPlayer(p.id)} sub={own ? (own === ME ? "yours" : own) : "free agent"} right={<><span className={"pill " + (own === ME ? "me" : own ? "own" : "up")}>{own === ME ? "Dimes" : own ? "owned" : "FA"}</span><Val p={p} label="per wk" /></>} idx={i} />; })}
+      <Fold id="leaders" title="Position leaders" def={false} summary="Top 12 at each position, league-wide, by real points or projection." aux={lbasis === "season" ? "season points so far" : lbasis === "week" ? `week ${week} points` : "rest of season, per week"}>
+        <div className="cb" style={{ paddingTop: 2, paddingBottom: 6 }}><div className="chips">{POS_LIST.map((g) => <button key={g} className={"chip" + (posTab === g ? " on" : "")} onClick={() => setPosTab(g)}>{g}</button>)}</div><div className="sortrow"><span className="lab">Basis</span>{[["season", "Season points"], ["week", `Week ${week}`], ["ros", "Rest of season proj"]].map(([k, l]) => <button key={k} className={"chip" + (lbasis === k ? " on" : "")} onClick={() => setLbasis(k)}>{l}</button>)}</div></div>
+        {leaders.length === 0 && <div className="empty">No points on the board yet for this basis.</div>}
+        {leaders.map((p, i) => { const own = owner[p.id]; const sa = seasonActual(p); return <PRow key={p.id} p={p} week={week} onClick={() => onPlayer(p.id)} sub={own ? (own === ME ? "yours" : own) : "free agent"} right={<><span className={"pill " + (own === ME ? "me" : own ? "own" : "up")}>{own === ME ? "Dimes" : own ? "owned" : "FA"}</span>{lbasis === "season" ? <span className="val cond"><div className="n">{fmt1(sa.pts)}</div><div className="l">{sa.g} gm</div></span> : lbasis === "week" ? <Val p={p} week={week} /> : <Val p={p} label="per wk" />}</>} idx={i} />; })}
       </Fold>
     </div></div>
   );
@@ -3197,7 +3225,6 @@ function GameCard({ g, week, roster, oppIds, oppName, onAddLeg, selected, onTogg
   const bestH = bestPrice(shop.map((r) => [r.book, r.shP])), bestA = bestPrice(shop.map((r) => [r.book, r.saP])), bestO = bestPrice(shop.map((r) => [r.book, r.oP])), bestU = bestPrice(shop.map((r) => [r.book, r.uP])), bestMH = bestPrice(shop.map((r) => [r.book, r.mlH])), bestMA = bestPrice(shop.map((r) => [r.book, r.mlA]));
   return (
     <div className={"gcard" + (selected ? " sel" : "") + (dim ? " dim" : "")}>
-      <div className="gband"><i style={{ background: TEAM_STYLE[g.away] ? TEAM_STYLE[g.away].bg : "#5A657D" }} /><i style={{ background: TEAM_STYLE[g.home] ? TEAM_STYLE[g.home].bg : "#5A657D" }} /></div>
       <button className="gsel" onClick={onToggle} aria-pressed={selected}>
         <div className="gtop"><span className="kick">{kick}{g.wx && g.wx.city ? `, ${g.wx.city}` : ""}</span>{hot && <span className="mx soft">Shootout</span>}{cold && <span className="mx tough">Slog</span>}{bestEv > 0.01 && <span className="mx soft">+EV line</span>}<span className="chk">{selected ? "✓" : ""}</span></div>
         <div className="gscore">
@@ -3207,15 +3234,15 @@ function GameCard({ g, week, roster, oppIds, oppName, onAddLeg, selected, onTogg
         </div>
         <div className="srcl">Vegas proj{g.anchor === "pinnacle" ? ", Pinnacle" : ""}</div>
         <div className="gline">{fav ? <b>{fav} by {Math.abs(g.spreadHome)}</b> : <b>Pick'em</b>}<span>O/U {tau != null ? tau : "–"}</span></div>
-        {modelTot != null && tau != null && <div className={"fol" + (Math.abs(modelTot - tau) >= 3 ? " hot" : "")}><span className="k">Front Office proj{gh && ga ? " (FI, PFF, FBG)" : ""}</span><span className="v cond">{g.away} {ma}, {g.home} {mh}</span><span className={"d cond " + (modelTot - tau > 0 ? "up" : "dn")}>{signed(modelTot - tau)} vs Vegas</span></div>}
-        {(() => { const dh = pffProfile(g.home, "def"), da = pffProfile(g.away, "def"); if (!dh && !da) return null; const f = (t, d) => d ? `${t} D: coverage ${d.cov} (${gradeWord(d.cov)}), pass rush ${d.prsh}, run D ${d.rdef}${d.pressRate != null ? `, pressure on ${d.pressRate}% of snaps` : ""}` : `${t} D: no graded games yet`; return <div className="gpl pffl"><span className="k">PFF grades so far</span><span>{f(g.home, dh)}</span><span>{f(g.away, da)}</span></div>; })()}
-        {gh && ga && <div className="gpl"><span className="k">Footballguys</span><span>{g.away} {ga.score}: {Math.round(ga.py)} pass, {Math.round(ga.ry)} rush yds</span><span>{g.home} {gh.score}: {Math.round(gh.py)} pass, {Math.round(gh.ry)} rush yds</span></div>}
-        <div className="wpbar"><i style={{ width: `${Math.round(pAway * 100)}%`, background: TEAM_STYLE[g.away] ? TEAM_STYLE[g.away].bg : "var(--ink3)" }} /><i style={{ width: `${Math.round(pHome * 100)}%`, background: TEAM_STYLE[g.home] ? TEAM_STYLE[g.home].bg : "var(--navy)" }} /></div>
+        {modelTot != null && tau != null && <div className={"fol" + (Math.abs(modelTot - tau) >= 3 ? " hot" : "")} style={{ display: notes ? undefined : "none" }}><span className="k">Front Office proj{gh && ga ? " (FI, PFF, FBG)" : ""}</span><span className="v cond">{g.away} {ma}, {g.home} {mh}</span><span className={"d cond " + (modelTot - tau > 0 ? "up" : "dn")}>{signed(modelTot - tau)} vs Vegas</span></div>}
+        {notes && (() => { const dh = pffProfile(g.home, "def"), da = pffProfile(g.away, "def"); if (!dh && !da) return null; const f = (t, d) => d ? `${t} D: coverage ${d.cov} (${gradeWord(d.cov)}), pass rush ${d.prsh}, run D ${d.rdef}${d.pressRate != null ? `, pressure on ${d.pressRate}% of snaps` : ""}` : `${t} D: no graded games yet`; return <div className="gpl pffl"><span className="k">PFF grades so far</span><span>{f(g.home, dh)}</span><span>{f(g.away, da)}</span></div>; })()}
+        {notes && gh && ga && <div className="gpl"><span className="k">Footballguys</span><span>{g.away} {ga.score}: {Math.round(ga.py)} pass, {Math.round(ga.ry)} rush yds</span><span>{g.home} {gh.score}: {Math.round(gh.py)} pass, {Math.round(gh.ry)} rush yds</span></div>}
+        <div className="wpbar calm"><i style={{ width: `${Math.round(pAway * 100)}%` }} /><i style={{ width: `${Math.round(pHome * 100)}%` }} /></div>
         <div className="wpl"><span>{Math.round(pAway * 100)}%</span><Wx wx={g.wx} /><span>{Math.round(pHome * 100)}%</span></div>
-        {(mine.length > 0 || theirs.length > 0) && <div className="gstakes">{mine.length > 0 && <span><b>Dimes:</b> {mine.map((p) => lastName(p.n)).join(", ")}</span>}{theirs.length > 0 && <span><b>{lastWord(oppName)}:</b> {theirs.map((p) => lastName(p.n)).join(", ")}</span>}</div>}
+        {(mine.length > 0 || theirs.length > 0) && <div className="gstakes">{mine.length > 0 && <span><b>Dimes:</b> {mine.map((p) => shortName(p)).join(", ")}</span>}{theirs.length > 0 && <span><b>{lastWord(oppName)}:</b> {theirs.map((p) => shortName(p)).join(", ")}</span>}</div>}
       </button>
       {notes && <div className="gnotes"><p><b>{g.away}</b> {teamNote(g.away).split(/(?<=[.!?])\s+/).slice(0, 2).join(" ")}</p><p><b>{g.home}</b> {teamNote(g.home).split(/(?<=[.!?])\s+/).slice(0, 2).join(" ")}</p><small>Fantasy Index, {NOTES_DATE}</small></div>}
-      <div className="gfoot"><button className="lnk" onClick={() => setOpen((v) => !v)}>{open ? "Hide prices" : bestEv > 0.01 ? `A price beats fair by ${signed(bestEv * 100)}%` : `Prices at ${MY_BOOKS.join(", ")}`}</button><button className="lnk" onClick={() => setNotes((v) => !v)} style={{ marginLeft: 8 }}>{notes ? "Hide notes" : "Notes"}</button><span className="muted small">{pHomeML != null && pHomeSp != null && Math.abs(pHomeML - pHomeSp) >= 0.03 ? `history says ${Math.round(pHomeSp * 100)}% ${g.home}` : ""}</span></div>
+      <div className="gfoot"><button className="lnk" onClick={() => setOpen((v) => !v)}>{open ? "Hide prices" : bestEv > 0.01 ? `A price beats fair by ${signed(bestEv * 100)}%` : `Prices at ${MY_BOOKS.join(", ")}`}</button><button className="lnk" onClick={() => setNotes((v) => !v)} style={{ marginLeft: 8 }}>{notes ? "Less" : "Details"}</button><span className="muted small">{pHomeML != null && pHomeSp != null && Math.abs(pHomeML - pHomeSp) >= 0.03 ? `history says ${Math.round(pHomeSp * 100)}% ${g.home}` : ""}</span></div>
       {open && shop.length === 0 && <div className="hint" style={{ paddingTop: 4 }}>This pull has no per-book prices. Refresh the lines and they will appear.</div>}
       {open && shop.length > 0 && (
         <div className="shop">
@@ -3343,7 +3370,7 @@ function EdgeView({ week, vegas, vegasBusy, vegasErr, onVegas, apiBase, owner, o
   const fresh = vegasFresh(week);
   const [mk, setMk] = useState("ALL"); const [mineOnly, setMineOnly] = useState(false); const [showAll, setShowAll] = useState(false); const [help, setHelp] = useState(false);
   const [sel, setSel] = useState(() => new Set());
-  const [gamesOpen, setGamesOpen] = useOpen("games", true); const [playsOpen, setPlaysOpen] = useOpen("plays", false); const [gSort, setGSort] = useState("kick"); const [pSort, setPSort] = useState("edge");
+  const [gamesOpen, setGamesOpen] = useOpen("games", true); const [playsOpen, setPlaysOpen] = useOpen("plays", true); const [gSort, setGSort] = useState("kick"); const [pSort, setPSort] = useState("edge");
   const toggleSel = (id) => setSel((s0) => { const n = new Set(s0); if (n.has(id)) n.delete(id); else n.add(id); return n; });
   const pricedAll = useMemo(() => priceProps(week, owner, bankroll), [vegas, week, owner, bankroll]);
   const games = fresh ? [...vegas.games].sort((a, b) => new Date(a.commence) - new Date(b.commence)) : [];
@@ -3371,19 +3398,7 @@ function EdgeView({ week, vegas, vegasBusy, vegasErr, onVegas, apiBase, owner, o
       {vegasErr && <div className="hint" style={{ color: "var(--stop)", padding: "0 4px 10px" }}>{vegasErr}</div>}
 
 
-      <JumpBar items={[["picks", "Best plays"], ["games", "Games"], ["plays", "All plays"], ["trends", "Trends"], ["record", "Record"]]} />
-      {fresh && (
-        <section className="card picks" id="picks"><div className="ch"><h2 className="cond">Best plays</h2><span className="aux">{selGames.length ? `${selGames.length} game${selGames.length > 1 ? "s" : ""} selected` : "this week"}</span></div>
-          {picks.length === 0 && <div className="empty">No props with a price at {MY_BOOKS.join(" or ")} yet. Pull again once FanDuel posts the week's props (usually Tuesday evening).</div>}
-          {picks.map((e, i) => { const t = tierOf(e); const ep = edgePts(e); return (
-            <div key={e.key + e.mk} className="pick">
-              <div className="pkh"><span className="pkn cond">{i + 1}</span><Badge p={e.p} /><div style={{ minWidth: 0, flex: 1 }}><div className="pname"><span className="t">{e.p.n} {e.side} {e.line}</span></div><div className="psub">{e.mk}{e.price != null ? `, ${fmtPrice(e.price)}` : ""}{e.book ? ` at ${e.book === "FD" ? "FanDuel" : e.book === "MGM" ? "BetMGM" : "DraftKings"}` : ""}, {e.game.replace("@", " @ ")}</div></div><div className="pkv"><b className={"cond tier " + (t || "").toLowerCase()}>{t}</b><small>edge {ep != null ? signed(ep) : "–"} pts</small></div></div>
-              <ul className="pkr">{e.reasons.map((r, j) => <li key={j}>{r}</li>)}</ul>
-              <div className="pkf"><span><b className="cond">{Math.round(e.pWin * 100)}%</b> our chance</span><span><b className="cond">{Math.round(e.fair * 100)}%</b> book's</span>{e.ev != null && <span><b className="cond">{signed(e.ev * 100)}%</b> return</span>}{e.stake > 0 && <span><b className="cond">${Math.round(e.stake)}</b> suggested</span>}<button className="btn sm pri" onClick={() => onAddLeg(e.leg)}>Add to slip</button></div>
-            </div>); })}
-        </section>
-      )}
-
+      <JumpBar items={[["games", "Games"], ["plays", "Plays"], ["trends", "Trends"], ["record", "Record"]]} />
       <SlipPanel slip={slip} bankroll={bankroll} onRemoveLeg={onRemoveLeg} onClear={onClearSlip} onLogBet={onLogBet} week={week} />
 
       <section className="card" id="games"><button className="fh" onClick={() => setGamesOpen((v) => !v)}><h2 className="cond">Games</h2><span className="aux">{fresh ? `${games.length} on the board${sel.size ? `, ${sel.size} selected` : ""}` : ""}</span><span className="chev">{gamesOpen ? "▾" : "▸"}</span></button>{fresh && sel.size > 0 && gamesOpen && <div className="cb" style={{ paddingTop: 0 }}><button className="lnk" onClick={() => setSel(new Set())}>clear selection</button></div>}
@@ -3394,7 +3409,7 @@ function EdgeView({ week, vegas, vegasBusy, vegasErr, onVegas, apiBase, owner, o
         {fresh && gamesOpen && <div className="hint">Scores are Vegas, from the total and spread. Front Office proj is our own Fantasy Index plus PFF stat lines added up by team. Where they disagree by 3 or more, the card is highlighted; that is where to look first.</div>}
       </section>
 
-      <section className="card" id="plays"><button className="fh" onClick={() => setPlaysOpen((v) => !v)}><h2 className="cond">All plays</h2><span className="aux">{fresh ? `${listed.length} shown` : ""}</span><span className="chev">{playsOpen ? "▾" : "▸"}</span></button>
+      <section className="card" id="plays"><button className="fh" onClick={() => setPlaysOpen((v) => !v)}><h2 className="cond">Plays</h2><span className="aux">{fresh ? `${listed.length} shown` : ""}</span><span className="chev">{playsOpen ? "▾" : "▸"}</span></button>
         {!fresh && <div className="empty">Pull the lines with props first.</div>}
         {fresh && playsOpen && <div className="cb" style={{ paddingTop: 2, paddingBottom: 6 }}><div className="chips">{["ALL", "Pass yds", "Pass TD", "Rush yds", "Rec", "Rec yds", "Anytime TD"].map((x) => <button key={x} className={"chip" + (mk === x ? " on" : "")} onClick={() => setMk(x)}>{x === "ALL" ? "All" : x}</button>)}<button className={"chip hl" + (mineOnly ? " on" : "")} onClick={() => setMineOnly((v) => !v)}>My players</button><button className={"chip" + (showAll ? " on" : "")} onClick={() => setShowAll((v) => !v)}>{showAll ? "Everything" : "With an edge"}</button></div>
           <div className="sortrow"><span className="lab">Sort</span>{[["edge", "Biggest edge"], ["ret", "Best return"], ["kick", "Kickoff"], ["name", "Player"]].map(([k, l]) => <button key={k} className={"chip" + (pSort === k ? " on" : "")} onClick={() => setPSort(k)}>{l}</button>)}</div></div>}
