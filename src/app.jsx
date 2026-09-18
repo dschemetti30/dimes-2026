@@ -284,9 +284,11 @@ function newsFor(p) {
   const ln = lastName(p.n); const re = new RegExp("(^|[^A-Za-z])" + ln.replace(/[.*+?^${}()|[\]\\]/g, "\\$&") + "([^A-Za-z]|$)");
   return NEWS.filter((n) => n.t === p.t && re.test(n.x));
 }
-function applyTransactions(s) {
+// Baked moves apply once, in order, from a cursor the save remembers. A new deploy only applies moves added since the last one,
+// so it can never replay an old move over something you did by hand in between.
+function applyTransactions(s, from) {
   let ns = { ...s, roster: [...s.roster], teams: { ...s.teams }, log: [...s.log], txSeen: [...(s.txSeen || [])] };
-  TRANSACTIONS.forEach((tx) => {
+  TRANSACTIONS.slice(from || 0).forEach((tx) => {
     const kAdd = txKey(tx.t, "add", tx.add, tx.team), kDrop = tx.drop ? txKey(tx.t, "drop", tx.drop, tx.team) : null;
     if (ns.txSeen.includes(kAdd)) return;
     const add = POOL_BY_ID[tx.add]; const drop = tx.drop ? POOL_BY_ID[tx.drop] : null;
@@ -296,6 +298,8 @@ function applyTransactions(s) {
     ns.txSeen.push(kAdd); if (kDrop) ns.txSeen.push(kDrop);
     ns.log = [{ t: tx.t, text: `${tx.team === ME ? "Added" : tx.team + " added"} ${add ? add.n : tx.add}${drop ? `, dropped ${drop.n}` : ""}.` }, ...ns.log];
   });
+  ns.txCursor = TRANSACTIONS.length;
+  ns.txCursor = TRANSACTIONS.length;
   return ns;
 }
 function freshState() {
@@ -303,7 +307,7 @@ function freshState() {
   const base = { v: 3, roster: TEAMS_INIT[ME].r.map((id) => ({ ...POOL_BY_ID[id], status: "ok", note: "", via: "Draft" })), teams, lineups: {}, results: {}, watch: [], log: [{ t: "Sep 5", text: "Drafted 16 players from the 9 seat." }], notes: "", chat: [], settings: { theme: "auto", rosterLimit: 16, playoffTeams: 6, bankroll: 500, books: ["FD", "MGM"], modelW: 0.35 }, txSeen: [], scores: {}, bets: [], slip: [], checklist: {}, limitSeeded: true, irSeeded: true };
   const out = applyTransactions(base); out.roster = out.roster.map((p) => (IR_DEFAULT.includes(p.id) ? { ...p, status: "ir" } : CEL_DEFAULT.includes(p.id) ? { ...p, status: "o", note: "Commissioner exempt list" } : p)); out.celSeeded = true; return out;
 }
-const SYNC_KEYS = ["roster", "teams", "lineups", "scores", "watch", "log", "notes", "chat", "bets", "slip", "checklist", "txSeen", "vegasHist", "settings", "weeklyUser", "irSeeded", "limitSeeded", "actuals", "gpUser", "teamLineups", "projSnap", "push", "pffUser", "history", "celSeeded", "picksLog"];
+const SYNC_KEYS = ["roster", "teams", "lineups", "scores", "watch", "log", "notes", "chat", "bets", "slip", "checklist", "txSeen", "vegasHist", "settings", "weeklyUser", "irSeeded", "limitSeeded", "actuals", "gpUser", "teamLineups", "projSnap", "push", "pffUser", "history", "celSeeded", "picksLog", "txCursor"];
 const pickSync = (s) => { const o = {}; SYNC_KEYS.forEach((k) => { if (s[k] !== undefined) o[k] = s[k]; }); if (o.settings) { o.settings = { ...o.settings }; delete o.settings.pin; } return o; };
 function migrate(s) {
   const fresh = freshState();
@@ -315,7 +319,8 @@ function migrate(s) {
   out.scores = s.scores || {};
   if (!s.scores && s.results) Object.keys(s.results).forEach((w) => { const r = s.results[w]; if (!r) return; out.scores[w] = { ...(out.scores[w] || {}) }; if (r.my !== "" && r.my != null) out.scores[w][ME] = r.my; const o = MY_SCHEDULE[w]; if (o && LSCHED[w] && r.opp !== "" && r.opp != null) out.scores[w][o] = r.opp; });
   out.settings.playoffTeams = out.settings.playoffTeams || 6; out.settings.bankroll = out.settings.bankroll || 500; out.settings.books = out.settings.books || ["FD", "MGM"]; out.settings.modelW = out.settings.modelW || 0.35; out.bets = s.bets || []; out.checklist = s.checklist || {}; out.slip = s.slip || [];
-  out = applyTransactions(out);
+  const from = s.txCursor != null ? s.txCursor : (s.txSeen && s.txSeen.length ? TRANSACTIONS.length : 0);
+  out = applyTransactions(out, from);
   if (!s.irSeeded) { out.roster = out.roster.map((p) => (IR_DEFAULT.includes(p.id) && (!p.status || p.status === "ok") ? { ...p, status: "ir" } : p)); out.irSeeded = true; }
   if (out.settings.rosterLimit === 17 && !s.limitSeeded) { out.settings.rosterLimit = 16; } out.limitSeeded = true;
   // heal earlier imports that created "K. Raymond" style placeholders
@@ -1910,8 +1915,9 @@ export default function App() {
   const setScore = (w, team, val) => update((s) => { const sc = { ...(s.scores || {}) }; sc[w] = { ...(sc[w] || {}) }; if (val === "" || val == null) delete sc[w][team]; else sc[w][team] = val; return { ...s, scores: sc }; });
   const setStatus = (id, status) => update((s) => { const p = s.roster.find((x) => x.id === id); let ns = { ...s, roster: s.roster.map((x) => (x.id === id ? { ...x, status } : x)) }; if (p && status === "ir" && p.status !== "ir") ns = addLog(ns, `Moved ${p.n} to IR.`); if (p && p.status === "ir" && status !== "ir") ns = addLog(ns, `Activated ${p.n} from IR.`); return ns; });
   const setNote = (id, note) => update((s) => ({ ...s, roster: s.roster.map((p) => (p.id === id ? { ...p, note } : p)) }));
-  const dropPlayer = (id) => { const p = byId[id]; undoable((s) => addLog({ ...s, roster: s.roster.filter((x) => x.id !== id), lineups: stripFromLineups(s.lineups, id) }, `Dropped ${p ? p.n : "a player"}.`), `Dropped ${p ? p.n : "player"}.`); };
-  const addPlayer = (pl, dropId) => { const dropped = dropId ? byId[dropId] : null; undoable((s) => { let ns = { ...s }; if (dropId) ns = { ...ns, roster: ns.roster.filter((x) => x.id !== dropId), lineups: stripFromLineups(ns.lineups, dropId) }; ns = { ...ns, roster: [...ns.roster, { ...(POOL_BY_ID[pl.id] || pl), status: "ok", note: "", via: "Waivers" }], watch: ns.watch.filter((w) => w.id !== pl.id) }; return addLog(ns, dropped ? `Added ${pl.n}, dropped ${dropped.n}.` : `Added ${pl.n}.`); }, dropped ? `Added ${pl.n}, dropped ${dropped.n}.` : `Added ${pl.n}.`); };
+  const todayKey = () => new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" });
+  const dropPlayer = (id) => { const p = byId[id]; undoable((s) => addLog({ ...s, roster: s.roster.filter((x) => x.id !== id), lineups: stripFromLineups(s.lineups, id), txSeen: [...(s.txSeen || []), txKey(todayKey(), "drop", id, ME)] }, `Dropped ${p ? p.n : "a player"}.`), `Dropped ${p ? p.n : "player"}.`); };
+  const addPlayer = (pl, dropId) => { const dropped = dropId ? byId[dropId] : null; undoable((s) => { let ns = { ...s }; if (dropId) ns = { ...ns, roster: ns.roster.filter((x) => x.id !== dropId), lineups: stripFromLineups(ns.lineups, dropId) }; ns = { ...ns, roster: [...ns.roster, { ...(POOL_BY_ID[pl.id] || pl), status: "ok", note: "", via: "Waivers" }], watch: ns.watch.filter((w) => w.id !== pl.id), txSeen: [...(ns.txSeen || []), txKey(todayKey(), "add", pl.id, ME), ...(dropId ? [txKey(todayKey(), "drop", dropId, ME)] : [])] }; return addLog(ns, dropped ? `Added ${pl.n}, dropped ${dropped.n}.` : `Added ${pl.n}.`); }, dropped ? `Added ${pl.n}, dropped ${dropped.n}.` : `Added ${pl.n}.`); };
   const toggleWatch = (pl) => update((s) => { const has = s.watch.some((w) => w.id === pl.id); return { ...s, watch: has ? s.watch.filter((w) => w.id !== pl.id) : [...s.watch, { ...(POOL_BY_ID[pl.id] || pl), note: "" }] }; });
   const setWatchNote = (id, note) => update((s) => ({ ...s, watch: s.watch.map((w) => (w.id === id ? { ...w, note } : w)) }));
   const setNotes = (notes) => update((s) => ({ ...s, notes }));
@@ -2466,7 +2472,7 @@ function TeamView({ roster, active, irList, week, myRank, rec, results, notes, l
         <Fold id="changes" title="Recent changes" def={false} aux={(history || []).length ? `${history.length} saved` : "nothing yet"} summary={(history || []).length ? `Last change: ${history[0].label}. Undo and restore live inside.` : "Every add, drop, import and restore saves a snapshot you can undo."}>
           {(history || []).slice(0, 6).map((h, i) => <div key={h.at} className="log"><div><span className="t">{new Date(h.at).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" })}</span><span>{h.label}</span><button className="btn sm" style={{ marginLeft: "auto" }} onClick={() => onRestore(i)}>Undo to here</button></div></div>)}
           <div className="btns" style={{ paddingTop: 6 }}><button className="btn" onClick={onRestoreKnown}>Restore Sept 16 Yahoo roster</button><button className="btn" onClick={onImport}>Import from Yahoo</button></div>
-          <div className="hint">Every add, drop, trade, import and restore saves a snapshot first. "Undo to here" puts rosters and lineups back to just before that change. Restore Sept 16 puts your roster back to the last transactions screenshot exactly: 15 active with one open spot, Henderson and Tyson on IR, Jacobs on the exempt list.</div>
+          <div className="hint">Every add, drop, trade, import and restore saves a snapshot first. "Undo to here" puts rosters and lineups back to just before that change. New deploys only apply moves added since the last one; they never replay old ones over yours. Restore Sept 16 puts your roster back to the last transactions screenshot exactly: 15 active with one open spot, Henderson and Tyson on IR, Jacobs on the exempt list.</div>
         </Fold>
         <div className="cols"><div className="col">
         {["QB", "RB", "TE"].map((g) => { const list = active.filter((p) => p.p === g); if (!list.length) return null; return (
