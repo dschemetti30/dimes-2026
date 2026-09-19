@@ -105,7 +105,7 @@ const TEAM_COLOR = Object.fromEntries(Object.keys(TEAM_PAL).map((t) => [t, TEAM_
 const TEAM_BYE = {};
 TEAMS.forEach((t) => { for (let w = 5; w <= 14; w++) { if (!NFL[w][t]) { TEAM_BYE[t] = w; break; } } });
 
-const BUILD = "v48, Sep 18 2026";
+const BUILD = "v49, Sep 18 2026";
 const ME = "Donnie Dimes";
 // Colors pulled from each team's Yahoo avatar; monograms in place of the avatars themselves
 const LEAGUE_STYLE = { "Donnie Dimes": { bg: "#0B2265", fg: "#FFFFFF", mono: "DD", logo: true }, "Spictaculous": { bg: "#C8102E", fg: "#FFFFFF", mono: "SPC" }, "Team Riggo": { bg: "#111111", fg: "#C9A227", mono: "RIG" }, "SOULTRAIN": { bg: "#1B8A3C", fg: "#0B1F12", mono: "SOUL" }, "Nothing Else Matters": { bg: "#5B2A86", fg: "#F2A7CF", mono: "NEM" }, "The Manglers": { bg: "#1A1A1A", fg: "#B8BEC8", mono: "MNG" }, "Underdog": { bg: "#B3261E", fg: "#F6E9D6", mono: "UDG" }, "The Fun Brunch": { bg: "#1E5BB8", fg: "#7DE39A", mono: "FUN" }, "What Would Breesus Do": { bg: "#D0021B", fg: "#FFFFFF", mono: "WWBD" }, "USC_Nemo": { bg: "#5A2E8C", fg: "#F5A54A", mono: "NEMO" }, "2 Cups of Rice": { bg: "#7A3FA0", fg: "#FFFFFF", mono: "2CR" }, "BIG DADDY": { bg: "#2E8B57", fg: "#DFF5E6", mono: "BIG" }, "Brafferton Beast II": { bg: "#C62828", fg: "#9CC0FF", mono: "BBII" }, "Knappachino": { bg: "#E0B23C", fg: "#2A2000", mono: "KNAP" } };
@@ -870,9 +870,10 @@ textarea.notes{min-height:120px;resize:vertical;line-height:1.5}
 .tbl .tr:hover{background:var(--press)}
 .tbl .tr .rowhit{padding:4px 0;min-width:0}
 .tbl .tr .ptxt{min-width:0}
+.mob{display:none}
 .tbl .tr .c{text-align:right;font-size:14px;font-weight:700;font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--ink2)}
 .tbl .tr .c.on{color:var(--ink);font-weight:800}
-@media (max-width:899px){.sth,.tbl .tr{grid-template-columns:minmax(0,1fr) repeat(3,minmax(44px,56px))}.sth .shb:nth-child(n+5),.tbl .tr .c:nth-child(n+5){display:none}.tbl.metrics .sth,.tbl.metrics .tr{grid-template-columns:minmax(0,1fr) repeat(4,minmax(40px,50px))}.tbl.metrics .sth .shb:nth-child(n+6),.tbl.metrics .tr .c:nth-child(n+6){display:none}}
+@media (max-width:899px){.tbl .sth,.tbl .tr,.tbl.trend .sth,.tbl.trend .tr{grid-template-columns:minmax(0,1fr) 76px 56px}.tbl .sth>:nth-child(3),.tbl .sth>:nth-child(n+5),.tbl .tr>:nth-child(3),.tbl .tr>:nth-child(n+5){display:none}.tbl .tr .rowhit{min-width:0;width:100%}.tbl .tr .ptxt{min-width:0;flex:1}.tbl .tr .pname .t{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.mob{display:inline}.tbl.metrics .sth,.tbl.metrics .tr{grid-template-columns:minmax(0,1fr) repeat(4,minmax(40px,50px))}.tbl.metrics .sth .shb:nth-child(n+6),.tbl.metrics .tr .c:nth-child(n+6){display:none}}
 .chip.sm{padding:4px 9px;font-size:11.5px}
 .gcard{border:1px solid var(--rule);border-radius:16px;background:var(--surface);box-shadow:0 1px 2px rgba(11,34,101,.05);overflow:hidden;padding:0 14px 12px;transition:transform .18s cubic-bezier(.2,.8,.2,1),box-shadow .18s,border-color .18s}
 .gcard:hover{transform:translateY(-2px);box-shadow:0 10px 26px rgba(11,34,101,.12)}
@@ -1694,6 +1695,21 @@ textarea.notes,input,select{font-size:13.5px;padding:9px 11px;border-radius:10px
 .sheet{will-change:transform}
 .toast{animation:pgin .22s both}
 @media (prefers-reduced-motion:reduce){.pg>*,.fsum,.toast{animation:none}.btn,.chip,.card,.wk{transition:none}}
+
+/* ===================== Mobile tables, final word ===================== */
+@media (max-width:899px){
+  .tbl .sth,.tbl .tr,.tbl.trend .sth,.tbl.trend .tr{grid-template-columns:minmax(0,1fr) 80px 56px;gap:6px}
+  .tbl .sth>:nth-child(3),.tbl .sth>:nth-child(n+5),.tbl .tr>:nth-child(3),.tbl .tr>:nth-child(n+5){display:none}
+  .tbl .sth .fst{white-space:nowrap}
+  .tbl .tr .rowhit{min-width:0;width:100%;display:flex;gap:9px;align-items:center}
+  .tbl .tr .ptxt{min-width:0;flex:1}
+  .tbl .tr .pname{display:block;min-width:0}
+  .tbl .tr .pname .t{display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:none}
+  .tbl .tr .psub{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;display:block}
+  .tbl.metrics .sth,.tbl.metrics .tr{grid-template-columns:minmax(0,1fr) 52px 52px 52px}
+  .tbl.metrics .sth>:nth-child(3),.tbl.metrics .tr>:nth-child(3){display:flex}
+  .tbl.metrics .sth>:nth-child(n+5),.tbl.metrics .tr>:nth-child(n+5){display:none}
+}
 `;
 
 // =============================================================================
@@ -2665,7 +2681,7 @@ function TrendTable({ freeAgents, onPlayer, onWatch, watch }) {
         {rows.length === 0 && <div className="empty">No trend data in this sync yet.</div>}
         {rows.map((r, i) => (
           <div key={r.p.id} className="tr in" style={{ animationDelay: `${Math.min(i, 10) * 18}ms` }}>
-            <button className="rowhit rowbtn" onClick={() => onPlayer(r.p.id)}><Badge p={r.p} /><span className="ptxt"><span className="pname"><span className="t">{r.p.n}</span>{watched.has(r.p.id) && <span className="pill me">Watch</span>}</span><span className="psub">{r.p.t}, bye {r.p.b}</span></span></button>
+            <button className="rowhit rowbtn" onClick={() => onPlayer(r.p.id)}><Badge p={r.p} /><span className="ptxt"><span className="pname"><span className="t">{r.p.n}</span></span><span className="psub">{r.p.t}, bye {r.p.b}{watched.has(r.p.id) && <span className="pill me">Watch</span>}<span className="mob muted">{r.drop ? `, ${r.drop.toLocaleString()} drops` : ""}</span></span></span></button>
             <span className={"c cond" + (sort === "add" ? " on" : "")} style={{ color: r.add ? "var(--go)" : undefined }}>{r.add ? `+${r.add.toLocaleString()}` : "–"}</span>
             <span className={"c cond" + (sort === "drop" ? " on" : "")} style={{ color: r.drop ? "var(--stop)" : undefined }}>{r.drop ? r.drop.toLocaleString() : "–"}</span>
             <span className={"c cond" + (sort === "pct" ? " on" : "")}>{r.pct != null ? `${r.pct}%` : "–"}</span>
