@@ -57,11 +57,7 @@
   "crons": [
     {
       "path": "/api/push?check=1",
-      "schedule": "0 13 * * *"
-    },
-    {
-      "path": "/api/push?check=1",
-      "schedule": "0 15,16 * * 0"
+      "schedule": "0 15 * * *"
     }
   ]
 }
