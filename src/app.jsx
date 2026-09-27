@@ -114,7 +114,7 @@ const TEAM_COLOR = Object.fromEntries(Object.keys(TEAM_PAL).map((t) => [t, TEAM_
 const TEAM_BYE = {};
 TEAMS.forEach((t) => { for (let w = 5; w <= 14; w++) { if (!NFL[w][t]) { TEAM_BYE[t] = w; break; } } });
 
-const BUILD = "v66, Sep 27 2026";
+const BUILD = "v67, Sep 27 2026";
 const ME = "Donnie Dimes";
 // Colors pulled from each team's Yahoo avatar; monograms in place of the avatars themselves
 const LEAGUE_STYLE = { "Donnie Dimes": { bg: "#0B2265", fg: "#FFFFFF", mono: "DD", logo: true }, "Spictaculous": { bg: "#C8102E", fg: "#FFFFFF", mono: "SPC" }, "Team Riggo": { bg: "#111111", fg: "#C9A227", mono: "RIG" }, "SOULTRAIN": { bg: "#1B8A3C", fg: "#0B1F12", mono: "SOUL" }, "Nothing Else Matters": { bg: "#5B2A86", fg: "#F2A7CF", mono: "NEM" }, "The Manglers": { bg: "#1A1A1A", fg: "#B8BEC8", mono: "MNG" }, "Underdog": { bg: "#B3261E", fg: "#F6E9D6", mono: "UDG" }, "The Fun Brunch": { bg: "#1E5BB8", fg: "#7DE39A", mono: "FUN" }, "What Would Breesus Do": { bg: "#D0021B", fg: "#FFFFFF", mono: "WWBD" }, "USC_Nemo": { bg: "#5A2E8C", fg: "#F5A54A", mono: "NEMO" }, "2 Cups of Rice": { bg: "#7A3FA0", fg: "#FFFFFF", mono: "2CR" }, "BIG DADDY": { bg: "#2E8B57", fg: "#DFF5E6", mono: "BIG" }, "Brafferton Beast II": { bg: "#C62828", fg: "#9CC0FF", mono: "BBII" }, "Knappachino": { bg: "#E0B23C", fg: "#2A2000", mono: "KNAP" } };
@@ -259,6 +259,13 @@ function bestLineup(players, week, season) {
   SLOTS.forEach((s) => { const p = avail.find((x) => !used.has(x.id) && s.elig.includes(x.p)); L[s.k] = p ? p.id : null; if (p) used.add(p.id); });
   return L;
 }
+// Kickoff time from the schedule strings ("Sun 1:00PM"), Eastern time. Week 1 Sunday is Sept 13, 2026.
+function kickoffTs(team, week) { const k = KICK[week] && KICK[week][team]; if (!k) return null; const m = String(k).match(/^(\w{3})\s+(\d{1,2}):(\d{2})\s*(AM|PM)/i); if (!m) return null; const off = { Thu: -3, Fri: -2, Sat: -1, Sun: 0, Mon: 1, Tue: 2, Wed: -4 }[m[1]] || 0; let h = parseInt(m[2], 10) % 12; if (/PM/i.test(m[4])) h += 12; const sun = Date.UTC(2026, 8, 13) + (week - 1) * 7 * 864e5; return sun + off * 864e5 + (h + 4) * 36e5 + parseInt(m[3], 10) * 6e4; }
+function lockedOf(p, week) { if (!p) return false; const a = actualOf(p, week); if (a && (a.done || a.live)) return true; const t = kickoffTs(p.t, week); return t != null && Date.now() >= t; }
+// Best lineup that respects locks: started players stay where they are; open slots fill from players who have not played.
+function bestLineupLocked(players, week, current) { const L = {}; const used = new Set(); SLOTS.forEach((s0) => { const id = current && current[s0.k]; const p = id && players.find((x) => x.id === id); if (p && lockedOf(p, week)) { L[s0.k] = id; used.add(id); } }); const avail = players.filter((p) => !used.has(p.id) && !lockedOf(p, week) && wkMetric(p, week) > 0).sort((a, b) => wkMetric(b, week) - wkMetric(a, week)); SLOTS.forEach((s0) => { if (L[s0.k]) return; const p = avail.find((x) => !used.has(x.id) && s0.elig.includes(x.p)); L[s0.k] = p ? p.id : null; if (p) used.add(p.id); }); return L; }
+// Points for a slot: actual once his game has started, projection before.
+function slotPts(p, week) { if (!p) return 0; const a = actualOf(p, week); return a && (a.done || a.live) ? a.pts : wkPts(p, week); }
 function lineupTotal(L, byId, week, season) { const val = season ? seasonPts : (p) => wkPts(p, week); return SLOTS.reduce((t, s) => t + (L[s.k] && byId[L[s.k]] ? val(byId[L[s.k]]) : 0), 0); }
 function sanitizeLineup(L, byId) { if (!L) return null; const out = {}; SLOTS.forEach((s) => { const p = L[s.k] ? byId[L[s.k]] : null; out[s.k] = p && p.status !== "ir" && s.elig.includes(p.p) ? p.id : null; }); return out; }
 function teamStrength(ids) { const players = ids.map((id) => POOL_BY_ID[id]).filter(Boolean); const byId = Object.fromEntries(players.map((p) => [p.id, p])); const L = bestLineup(players, NEUTRAL_WEEK, true); return { total: lineupTotal(L, byId, NEUTRAL_WEEK, true), L, players, byId }; }
@@ -2008,7 +2015,8 @@ export default function App() {
       else if (p.status === "d") a.push({ lvl: "bad", text: `${p.n} is doubtful`, sub: `${s.label} slot, find a backup plan`, go: "Swap", do: () => setSheet({ type: "slot", slot: s.k }) });
       else if (p.status === "q") a.push({ lvl: "warn", text: `${p.n} is questionable`, sub: `${s.label} slot, check the Sunday report`, go: "Options", do: () => setSheet({ type: "slot", slot: s.k }) });
     });
-    if (isSaved && autoTotal - myTotal >= 1) a.push({ lvl: "warn", text: `Projections like a different lineup by ${fmt1(autoTotal - myTotal)}`, sub: "Blend of Fantasy Index and Footballguys", go: "Compare", do: () => setSheet({ type: "compare" }) });
+    const bL = isSaved ? bestLineupLocked(active, week, lineup) : null; const gainL = bL ? SLOTS.reduce((t, s0) => t + (bL[s0.k] && byId[bL[s0.k]] ? slotPts(byId[bL[s0.k]], week) : 0) - (lineup[s0.k] && byId[lineup[s0.k]] ? slotPts(byId[lineup[s0.k]], week) : 0), 0) : 0;
+    if (isSaved && gainL >= 1) a.push({ lvl: "warn", text: `Projections like a different lineup by ${fmt1(gainL)}`, sub: "Only players who have not played yet can move", go: "Compare", do: () => setSheet({ type: "compare" }) });
     if (DEPTH && DEPTH.teams) { const worries = []; SLOTS.forEach((s0) => { const p = lineup[s0.k] ? byId[lineup[s0.k]] : null; if (!p || p.p === "DEF" || p.p === "K") return; const d = depthOf(p); if (!d || d.missing) return; if (d.flag === "battle") worries.push(`${lastName(p.n)} is in an open battle at ${p.p}`); else if (d.order >= 3 || (d.order === 2 && p.p !== "WR")) worries.push(`${lastName(p.n)} is ${p.p}${d.order} behind ${d.ahead.join(", ")}`); }); const recent = (DEPTH.changes || []).filter((c) => Date.now() - (c.at || 0) < 3 * 86400e3 && active.some((p) => p.t === c.t && p.p === c.pos && normName(p.n) === normName(c.name))); if (worries.length || recent.length) a.push({ lvl: recent.some((c) => c.dir === "down") || worries.length ? "warn" : "info", text: recent.length ? recent[0].text : `Depth chart: ${worries[0]}`, sub: [...recent.slice(1).map((c) => c.text), ...worries.slice(recent.length ? 0 : 1)].slice(0, 2).join(" ") || `Two Deep, updated ${DEPTH.updated || "recently"}.`, go: "News", do: () => { setTab("team"); } }); }
     if (opp) { const wp = winProb(lineupTotal(lineup, byId, week), opp.total); const mode = (settings.lineupMode || "auto") === "auto" ? (wp < 0.4 ? "ceil" : wp > 0.62 ? "floor" : "mean") : settings.lineupMode; if (mode !== "mean" && !isSaved) a.push({ lvl: "info", text: mode === "ceil" ? `Underdog at ${Math.round(wp * 100)}%: auto lineup favors ceiling` : `Favored at ${Math.round(wp * 100)}%: auto lineup favors floor`, sub: mode === "ceil" ? "Stacks with your QB get a small bump; players in your opponent's games get a small penalty. Change the lean in Settings." : "Players in your opponent's games get a small bump as a hedge; stacks a small penalty. Change the lean in Settings.", go: "Settings", do: () => setSheet({ type: "menu" }) }); }
     if (!isSaved && week >= currentWeek()) a.push({ lvl: "info", text: "Lineup is on auto", sub: `Projected best, ${fmt1(myTotal)} pts. Lock it in once you have read the news.`, go: "Lock in", do: () => { autoFill(); showToast(`Week ${week} lineup set.`); } });
@@ -2022,7 +2030,7 @@ export default function App() {
   // ---- actions -----------------------------------------------------------------------
   const stripFromLineups = (lineups, id) => { const out = {}; Object.keys(lineups).forEach((w) => { const L = { ...lineups[w] }; Object.keys(L).forEach((k) => { if (L[k] === id) L[k] = null; }); out[w] = L; }); return out; };
   const setSlot = (slotKey, id) => update((s) => { const L = { ...lineup }; if (id) { const other = Object.keys(L).find((k) => L[k] === id && k !== slotKey); const displaced = L[slotKey]; L[slotKey] = id; if (other) { const o = SLOTS.find((x) => x.k === other); const dp = displaced ? byId[displaced] : null; L[other] = dp && o.elig.includes(dp.p) ? displaced : null; } } else L[slotKey] = null; return { ...s, lineups: { ...s.lineups, [week]: L } }; });
-  const autoFill = () => update((s) => ({ ...s, lineups: { ...s.lineups, [week]: bestLineup(sortRoster(s.roster).filter((p) => p.status !== "ir"), week) } }));
+  const autoFill = () => update((s) => ({ ...s, lineups: { ...s.lineups, [week]: bestLineupLocked(sortRoster(s.roster).filter((p) => p.status !== "ir"), week, s.lineups[week] || lineup) } }));
   const resetAuto = () => update((s) => { const l = { ...s.lineups }; delete l[week]; return { ...s, lineups: l }; });
   const setResult = (w, field, val) => update((s) => { const team = field === "my" ? ME : MY_SCHEDULE[w]; const sc = { ...(s.scores || {}) }; sc[w] = { ...(sc[w] || {}) }; if (val === "" || val == null) delete sc[w][team]; else sc[w][team] = val; return { ...s, scores: sc }; });
   const setScore = (w, team, val) => update((s) => { const sc = { ...(s.scores || {}) }; sc[w] = { ...(sc[w] || {}) }; if (val === "" || val == null) delete sc[w][team]; else sc[w][team] = val; return { ...s, scores: sc }; });
@@ -2176,7 +2184,7 @@ export default function App() {
       {toast && <div className="toast"><div className="in"><span>{toast.text}</span>{toast.undoable && <button onClick={undo}>Undo</button>}</div></div>}
 
       {sheet && sheet.type === "slot" && <SlotSheet slotKey={sheet.slot} lineup={lineup} roster={active} week={week} byId={byId} onPick={(id) => { setSlot(sheet.slot, id); setSheet(null); }} onClose={() => setSheet(null)} />}
-      {sheet && sheet.type === "compare" && <CompareSheet lineup={lineup} autoL={autoL} byId={byId} week={week} myTotal={myTotal} autoTotal={autoTotal} onApply={() => { autoFill(); setSheet(null); showToast("Lineup updated."); }} onClose={() => setSheet(null)} />}
+      {sheet && sheet.type === "compare" && <CompareSheet lineup={lineup} active={active} byId={byId} week={week} onApply={() => { autoFill(); setSheet(null); showToast("Lineup updated."); }} onClose={() => setSheet(null)} />}
       {sheet && sheet.type === "player" && <PlayerSheet id={sheet.id} p={byId[sheet.id] || POOL_BY_ID[sheet.id]} mine={!!byId[sheet.id]} ownerName={owner[sheet.id]} week={week} irCount={irList.length} watched={state.watch.some((w) => w.id === sheet.id)} lineup={lineup} byId={byId} onMove={moveTo} onSwap={swapInto} onIR={toIR} onFromIR={fromIR}
         onStatus={(st) => setStatus(sheet.id, st)} onNote={(n) => setNote(sheet.id, n)} onDrop={() => { dropPlayer(sheet.id); setSheet(null); }} onAdd={() => setSheet({ type: "add", pick: POOL_BY_ID[sheet.id] })} onWatch={() => toggleWatch(POOL_BY_ID[sheet.id])}
         onTrade={() => setSheet({ type: "trade", team: owner[sheet.id], want: sheet.id })} onAsk={askCoach} onClose={() => setSheet(null)} />}
@@ -2395,15 +2403,23 @@ function SlotSheet({ slotKey, lineup, roster, week, byId, onPick, onClose }) {
     </Sheet>
   );
 }
-function CompareSheet({ lineup, autoL, byId, week, myTotal, autoTotal, onApply, onClose }) {
+function CompareSheet({ lineup, active, byId, week, onApply, onClose }) {
+  const best = bestLineupLocked(active, week, lineup);
+  const tot = (L) => SLOTS.reduce((t, s0) => t + (L[s0.k] && byId[L[s0.k]] ? slotPts(byId[L[s0.k]], week) : 0), 0);
+  const mine = tot(lineup), theirs = tot(best);
+  const inMine = new Set(Object.values(lineup).filter(Boolean)), inBest = new Set(Object.values(best).filter(Boolean));
+  const ins = [...inBest].filter((id) => !inMine.has(id)).map((id) => byId[id]), outs = [...inMine].filter((id) => !inBest.has(id)).map((id) => byId[id]);
+  const gain = theirs - mine; const same = ins.length === 0;
+  const cell = (p) => { if (!p) return <>Empty</>; const a = actualOf(p, week); const lk = lockedOf(p, week); return <>{p.n}<div className="n">{a && (a.done || a.live) ? `${fmt1(a.pts)} ${a.done ? "final" : "live"}` : `${fmt1(wkPts(p, week))} proj`}{lk && !(a && (a.done || a.live)) ? ", locked" : ""}</div></>; };
   return (
-    <Sheet title="Yours vs projected best" sub={`Yours ${fmt1(myTotal)}, projections ${fmt1(autoTotal)}. Both sources blended 50/50.`} onClose={onClose}>
+    <Sheet title="Yours vs projected best" sub={same ? "Same players; nothing to change." : `Swap ${ins.map((p) => shortName(p)).join(", ")} in for ${outs.map((p) => shortName(p)).join(", ")}: ${gain >= 0 ? "+" : ""}${fmt1(gain)} projected.`} onClose={onClose}>
       <div className="card">
-        <div className="cmp"><span className="s cond">Slot</span><span className="n">Yours</span><span className="n">Projected</span></div>
-        {SLOTS.map((s) => { const a = lineup[s.k] ? byId[lineup[s.k]] : null; const b = autoL[s.k] ? byId[autoL[s.k]] : null; const diff = (a ? a.id : null) !== (b ? b.id : null); return <div key={s.k} className="cmp"><span className="s cond">{s.label}</span><span>{a ? a.n : "Empty"}<div className="n">{a ? fmt1(wkPts(a, week)) : ""}</div></span><span className={diff ? "better" : ""}>{b ? b.n : "Empty"}<div className="n">{b ? fmt1(wkPts(b, week)) : ""}</div></span></div>; })}
+        <div className="cmp"><span className="s cond">Slot</span><span className="n">Yours, {fmt1(mine)}</span><span className="n">Best, {fmt1(theirs)}</span></div>
+        {SLOTS.map((s0) => { const a = lineup[s0.k] ? byId[lineup[s0.k]] : null; const b = best[s0.k] ? byId[best[s0.k]] : null; const isNew = b && !inMine.has(b.id); return <div key={s0.k} className="cmp"><span className="s cond">{s0.label}</span><span>{cell(a)}</span><span className={isNew ? "better" : ""}>{cell(b)}</span></div>; })}
       </div>
-      <div className="btns"><button className="btn pri" onClick={onApply}>Use projected best</button><button className="btn" onClick={onClose}>Keep mine</button></div>
-      <div className="hint">Projections do not see this week's matchups or late injury news. Trust your read when you have one.</div>
+      {!same && Math.abs(gain) < 1 && <div className="prep q">This is a coin flip: {fmt1(Math.abs(gain))} points. Players who only change slots are not highlighted; the green name is the one actually coming in.</div>}
+      <div className="btns">{!same && <button className="btn pri" onClick={onApply}>Use projected best</button>}<button className="btn" onClick={onClose}>{same ? "Close" : "Keep mine"}</button></div>
+      <div className="hint">Totals count actual points for anyone whose game has started and projections for everyone else. Started players stay locked in their slots, the same as Yahoo.</div>
     </Sheet>
   );
 }
