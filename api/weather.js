@@ -1,0 +1,27 @@
+// Kickoff-hour weather for outdoor stadiums from Open-Meteo (free, no key). Cached one hour.
+// GET /api/weather?g=HOME:2026-10-11T17:00:00Z,HOME:ISO,...  HOME is the stadium key (team abbr, or LON/WEM for London).
+const SITES = {
+  ARI: { lat: 33.5276, lon: -112.2626, dome: true, name: "State Farm Stadium" }, ATL: { lat: 33.7554, lon: -84.4010, dome: true, name: "Mercedes-Benz Stadium" }, BAL: { lat: 39.2780, lon: -76.6227, name: "M&T Bank Stadium" }, BUF: { lat: 42.7738, lon: -78.7870, name: "Highmark Stadium" }, CAR: { lat: 35.2258, lon: -80.8528, name: "Bank of America Stadium" }, CHI: { lat: 41.8623, lon: -87.6167, name: "Soldier Field" }, CIN: { lat: 39.0954, lon: -84.5160, name: "Paycor Stadium" }, CLE: { lat: 41.5061, lon: -81.6995, name: "Huntington Bank Field" }, DAL: { lat: 32.7473, lon: -97.0945, dome: true, name: "AT&T Stadium" }, DEN: { lat: 39.7439, lon: -105.0201, name: "Empower Field" }, DET: { lat: 42.3400, lon: -83.0456, dome: true, name: "Ford Field" }, GB: { lat: 44.5013, lon: -88.0622, name: "Lambeau Field" }, HOU: { lat: 29.6847, lon: -95.4107, dome: true, name: "NRG Stadium" }, IND: { lat: 39.7601, lon: -86.1639, dome: true, name: "Lucas Oil Stadium" }, JAX: { lat: 30.3239, lon: -81.6373, name: "EverBank Stadium" }, KC: { lat: 39.0489, lon: -94.4839, name: "Arrowhead Stadium" }, LV: { lat: 36.0909, lon: -115.1833, dome: true, name: "Allegiant Stadium" }, LAC: { lat: 33.9535, lon: -118.3392, dome: true, name: "SoFi Stadium" }, LAR: { lat: 33.9535, lon: -118.3392, dome: true, name: "SoFi Stadium" }, MIA: { lat: 25.9580, lon: -80.2389, name: "Hard Rock Stadium" }, MIN: { lat: 44.9736, lon: -93.2575, dome: true, name: "U.S. Bank Stadium" }, NE: { lat: 42.0909, lon: -71.2643, name: "Gillette Stadium" }, NO: { lat: 29.9511, lon: -90.0812, dome: true, name: "Caesars Superdome" }, NYG: { lat: 40.8135, lon: -74.0745, name: "MetLife Stadium" }, NYJ: { lat: 40.8135, lon: -74.0745, name: "MetLife Stadium" }, PHI: { lat: 39.9008, lon: -75.1675, name: "Lincoln Financial Field" }, PIT: { lat: 40.4468, lon: -80.0158, name: "Acrisure Stadium" }, SF: { lat: 37.4030, lon: -121.9700, name: "Levi's Stadium" }, SEA: { lat: 47.5952, lon: -122.3316, name: "Lumen Field" }, TB: { lat: 27.9759, lon: -82.5033, name: "Raymond James Stadium" }, TEN: { lat: 36.1665, lon: -86.7713, name: "Nissan Stadium" }, WAS: { lat: 38.9077, lon: -76.8645, name: "Northwest Stadium" },
+  LON: { lat: 51.6043, lon: -0.0664, name: "Tottenham Hotspur Stadium, London" }, WEM: { lat: 51.5560, lon: -0.2795, name: "Wembley Stadium, London" }, MUN: { lat: 48.2188, lon: 11.6247, name: "Allianz Arena, Munich" }, MEX: { lat: 19.3029, lon: -99.1505, name: "Estadio Azteca, Mexico City" },
+};
+module.exports = async (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*"); res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Cache-Control", "s-maxage=3600, stale-while-revalidate=600");
+  if (req.method === "OPTIONS") return res.status(200).end();
+  const list = String((req.query || {}).g || "").split(",").map((x) => x.trim()).filter(Boolean).map((x) => { const i = x.indexOf(":"); return { key: x.slice(0, i).toUpperCase(), iso: x.slice(i + 1) }; }).filter((x) => SITES[x.key] && !isNaN(Date.parse(x.iso))).slice(0, 20);
+  const out = {}; const now = Date.now();
+  await Promise.all(list.map(async ({ key, iso }) => {
+    const s = SITES[key]; const base = { site: s.name, dome: !!s.dome, kick: iso };
+    if (s.dome) { out[key] = { ...base }; return; }
+    const kick = new Date(iso); const hours = (kick.getTime() - now) / 3600e3; if (hours > 15 * 24 || hours < -6) { out[key] = { ...base, pending: true }; return; }
+    const day = iso.slice(0, 10); const end = new Date(kick.getTime() + 4 * 3600e3).toISOString().slice(0, 10);
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${s.lat}&longitude=${s.lon}&hourly=temperature_2m,apparent_temperature,wind_speed_10m,wind_gusts_10m,precipitation_probability,precipitation,snowfall,weather_code&temperature_unit=fahrenheit&wind_speed_unit=mph&precipitation_unit=inch&timezone=UTC&start_date=${day}&end_date=${end}`;
+    try {
+      const r = await fetch(url); if (!r.ok) throw new Error(`open-meteo ${r.status}`); const j = await r.json(); const h = j.hourly || {}; const t = h.time || [];
+      const k0 = kick.toISOString().slice(0, 13); let i0 = t.findIndex((x) => x.slice(0, 13) === k0); if (i0 < 0) i0 = 0; const idx = [i0, i0 + 1, i0 + 2, i0 + 3].filter((i) => i < t.length);
+      const avg = (a) => { const v = idx.map((i) => (a || [])[i]).filter((x) => x != null); return v.length ? Math.round((v.reduce((p, q) => p + q, 0) / v.length) * 10) / 10 : null; }; const max = (a) => { const v = idx.map((i) => (a || [])[i]).filter((x) => x != null); return v.length ? Math.max(...v) : null; }; const sum = (a) => { const v = idx.map((i) => (a || [])[i]).filter((x) => x != null); return v.length ? Math.round(v.reduce((p, q) => p + q, 0) * 100) / 100 : null; };
+      out[key] = { ...base, temp: avg(h.temperature_2m), feels: avg(h.apparent_temperature), wind: avg(h.wind_speed_10m), gust: max(h.wind_gusts_10m), pop: max(h.precipitation_probability), rain: sum(h.precipitation), snow: sum(h.snowfall), code: (h.weather_code || [])[i0] != null ? h.weather_code[i0] : null };
+    } catch (e) { out[key] = { ...base, error: String(e.message || e) }; }
+  }));
+  res.status(200).json({ at: now, src: "Open-Meteo", by: out });
+};
